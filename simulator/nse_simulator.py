@@ -1,4 +1,14 @@
 #!/bin/env python3
+"""
+NexStar AUX Simulator Main Entry Point
+
+This script starts an asynchronous server simulating a Celestron mount.
+It supports:
+    - AUX bus emulation on port 2000 (default)
+    - Stellarium protocol emulation on port 10001 (default)
+    - Headless mode (-t) for background execution
+    - TUI mode (default) using curses
+"""
 
 import asyncio
 import signal
@@ -23,6 +33,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_config():
+    """Loads simulator and observer settings from config.yaml."""
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r') as f:
@@ -34,260 +45,179 @@ def load_config():
 config = load_config()
 obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
 
-telescope=None
+telescope = None
 
 async def broadcast(sport=2000, dport=55555, host='255.255.255.255', seconds_to_sleep=5):
+    """Broadcasts UDP packets to simulate a WiFly discovery service."""
     sck = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sck.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     sck.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
-    # Fake msg. The app does not care for the payload
-    msg = 110*b'X'
-    sck.bind(('',sport))
+    msg = 110 * b'X'
+    sck.bind(('', sport))
     if telescope:
-        telescope.print_msg('Broadcasting to port {0}'.format(dport))
-        telescope.print_msg('sleeping for: {0} seconds'.format(seconds_to_sleep))
-    while True :
-        bn = sck.sendto(msg,(host,dport))
+        telescope.print_msg(f'Broadcasting to port {dport}')
+    while True:
+        sck.sendto(msg, (host, dport))
         await asyncio.sleep(seconds_to_sleep)
-    if telescope:
-        telescope.print_msg('Stopping broadcast')
 
 async def timer(seconds_to_sleep=1.0, telescope=None):
+    """Timer loop to trigger physical model updates (ticks)."""
     from time import time
-    t=time()
-    while True :
+    t = time()
+    while True:
         await asyncio.sleep(seconds_to_sleep)
         cur_t = time()
-        if telescope : 
-            telescope.tick(cur_t-t)
-        t=cur_t
+        if telescope:
+            telescope.tick(cur_t - t)
+        t = cur_t
 
 async def handle_port2000(reader, writer):
-    '''
-    This function handles initial communication with the WiFly module and
-    delegates the real job of simulating the scope to the NexStarScope class.
-    It also handles all the dirty details of actual communication.
-    '''
-    
-    # The WiFly module is initially in the transparent mode and just passes
-    # the data to the serial connection. Unless the '$$$' sequence is detected.
-    # Then it switches to the command mode until the exit command is issued.
-    # The $$$ should be guarded by the 1s silence.
-    transparent=True
-    retry = 5
+    """Handles communication on the AUX port (2000)."""
+    transparent = True
     global telescope
-    # Endless comm loop.
-    connected=False
-    while True :
+    connected = False
+    
+    while True:
         data = await reader.read(1024)
-        if not data :
+        if not data:
             writer.close()
-            if telescope:
-                telescope.print_msg('Connection closed. Closing server.')
+            if telescope: telescope.print_msg('Connection closed.')
             return
-        elif not connected :
-            if telescope:
-                telescope.print_msg('App from {0} connected.'.format(writer.get_extra_info('peername')))
-            connected=True
-        retry = 5
-        addr = writer.get_extra_info('peername')
-        #print("-> Scope received %r from %r." % (data, addr))
+        elif not connected:
+            if telescope: telescope.print_msg(f'Client connected from {writer.get_extra_info("peername")}')
+            connected = True
+            
         resp = b''
-        if transparent :
-            if data[:3]==b'$$$' :
-                # Enter command mode
+        if transparent:
+            if data[:3] == b'$$$':
                 transparent = False
-                if telescope:
-                    telescope.print_msg('App from {0} connected.'.format(addr))
                 resp = b'CMD\r\n'
-            else :
-                # pass it on to the scope for handling
-                if telescope:
-                    resp = telescope.handle_msg(data)
-        else :
-            # We are in command mode detect exit and get out.
-            # Otherwise just echo what we got and ack.
-            message = b''
-            try :
-                message = data.decode('ascii').strip()
-            except UnicodeError :
-                # The data is invalid ascii - ignore it
-                pass
-            if message == 'exit' :
-                # get out of the command mode
+            else:
+                if telescope: resp = telescope.handle_msg(data)
+        else:
+            message = data.decode('ascii', errors='ignore').strip()
+            if message == 'exit':
                 transparent = True
                 resp = data + b'\r\nEXIT\r\n'
-            else :
+            else:
                 resp = data + b'\r\nAOK\r\n<2.40-CEL> '
-        if resp :
-            #print("<- Server sending: %r" % resp )
+        
+        if resp:
             writer.write(resp)
             await writer.drain()
 
-def to_be(n, size):
-    b=bytearray(size)
-    i=size-1
-    while i >= 0:
-        b[i] = n % 256
-        n = n >> 8
-        i -= 1
-    return b
-def from_be(b):
-    n=0
-    for i in range(len(b)):
-        n = (n << 8) + b[i]
-    return n
 def to_le(n, size):
-    b=bytearray(size)
-    i=0
-    while i < size:
-        b[i] = n % 256
-        n = n >> 8
-        i += 1
-    return b
-def from_le(b):
-    n=0
-    for i in range(len(b)-1, -1, -1):
-        n = (n << 8) + b[i]
-    return n
+    """Converts int to Little-Endian bytes."""
+    return n.to_bytes(size, 'little')
 
+def from_le(b):
+    """Converts Little-Endian bytes to int."""
+    return int.from_bytes(b, 'little')
 
 def handle_stellarium_cmd(tel, d):
+    """Parses incoming Stellarium Goto commands."""
     import time
-    p=0
-    while p < len(d)-2:
-        psize=from_le(d[p:p+2]) 
-        if (psize > len(d) - p):
-            break
-        ptype=from_le(d[p+2:p+4])
-        if ptype == 0:
-            micros=from_le(d[p+4:p+12])
-            if abs((micros/1000000.0) - int(time.time())) > 60.0:
-                tel.print_msg('Client clock differs for more than one minute: '+str(int(micros/1000000.0))+'/'+str(int(time.time())))
-            targetraint=from_le(d[p+12:p+16])
-            targetdecint=from_le(d[p+16:p+20])
-            if (targetdecint > (4294967296 / 2)):
-                targetdecint = - (4294967296 - targetdecint)
-            targetra=(targetraint * 24.0) / 4294967296.0
-            targetdec=(targetdecint * 360.0) / 4294967296.0
-            tel.print_msg('GoTo {} {}'.format(repr_angle(targetra/360),
-                                                repr_angle(targetdec/360)))
-            p+=psize
+    p = 0
+    while p < len(d) - 2:
+        psize = from_le(d[p:p+2]) 
+        if (psize > len(d) - p): break
+        ptype = from_le(d[p+2:p+4])
+        if ptype == 0: # Goto
+            targetra = from_le(d[p+12:p+16]) * 24.0 / 4294967296.0
+            targetdec = from_le(d[p+16:p+20]) * 360.0 / 4294967296.0
+            tel.print_msg(f'Stellarium GoTo: RA={targetra:.2f}h Dec={targetdec:.2f}deg')
+            p += psize
         else:
-            # No such cmd
-            tel.print_msg('Stellarium: unknown command ({})'.format(ptype))
-            p+=psize
+            p += psize
     return p
 
-def make_stellarium_status(tel,obs):
-    import math
-    import time
+def make_stellarium_status(tel, obs):
+    """Generates Stellarium status packet (Position report)."""
     import ephem
     from math import pi
+    import time
+    import math
     
-    alt=tel.alt
-    azm=tel.azm
-    obs.date=ephem.now()
-    rajnow, decjnow=obs.radec_of(azm*2*pi, alt*2*pi)
-    rajnow/=2*pi
-    decjnow/=2*pi
-    status=0
-    msg=bytearray(24)
-    msg[0:2]=to_le(24, 2)
-    msg[2:4]=to_le(0, 2)
-    tstamp=int(time.time())
-    msg[4:12]=to_le(tstamp, 8)
-    msg[12:16]=to_le(int(math.floor(rajnow * 4294967296.0)), 4)
-    msg[16:20]=to_le(int(math.floor(decjnow * 4294967296.0)), 4)
-    msg[20:24]=to_le(status, 4)
+    obs.date = ephem.now()
+    rajnow, decjnow = obs.radec_of(tel.azm * 2 * pi, tel.alt * 2 * pi)
+    
+    msg = bytearray(24)
+    msg[0:2] = to_le(24, 2)
+    msg[2:4] = to_le(0, 2)
+    msg[4:12] = to_le(int(time.time()), 8)
+    msg[12:16] = to_le(int(math.floor((rajnow / (2*pi)) * 4294967296.0)), 4)
+    msg[16:20] = to_le(int(math.floor((decjnow / (2*pi)) * 4294967296.0)), 4)
     return msg
-    
 
 connections = []
 
 async def report_scope_pos(sleep=0.1, scope=None, obs=None):
+    """Broadcasts current position to all connected Stellarium clients."""
     while True:
         await asyncio.sleep(sleep)
         for tr in connections:
-            tr.write(make_stellarium_status(scope,obs))
-
+            try: tr.write(make_stellarium_status(scope, obs))
+            except: pass
 
 class StellariumServer(asyncio.Protocol):
-
+    """Asynchronous protocol implementation for Stellarium TCP server."""
     def __init__(self, *arg, **kwarg):
         import ephem
-        global telescope
-        global obs_cfg
-        
+        global telescope, obs_cfg
         self.obs = ephem.Observer()
         self.obs.lat = str(obs_cfg.get("latitude", 50.1822))
         self.obs.lon = str(obs_cfg.get("longitude", 19.7925))
         self.obs.elevation = float(obs_cfg.get("elevation", 400))
-        self.telescope=telescope
-        asyncio.Protocol.__init__(self,*arg,**kwarg)
+        self.telescope = telescope
+        asyncio.Protocol.__init__(self, *arg, **kwarg)
 
     def connection_made(self, transport):
-        peername = transport.get_extra_info('peername')
-        if self.telescope is not None:
-            self.telescope.print_msg('Stellarium from {}\n'.format(peername))
-        self.transport = transport
         connections.append(transport)
+        if self.telescope: self.telescope.print_msg('Stellarium client connected.')
         
     def connection_lost(self, exc):
-        try:
-            connections.remove(self.transport)
-            if self.telescope is not None:
-                self.telescope.print_msg('Stellarium connection closed\n')
-        except ValueError:
-            pass
+        try: connections.remove(self.transport)
+        except: pass
 
-    def data_received(self,data):
-        if self.telescope is not None:
-            handle_stellarium_cmd(self.telescope,data)
+    def data_received(self, data):
+        if self.telescope: handle_stellarium_cmd(self.telescope, data)
     
 def main(stdscr, args):
+    """Main application loop."""
     import ephem
-    global obs_cfg
-    global telescope 
+    global telescope, obs_cfg
 
     obs = ephem.Observer()
     obs.lat = str(obs_cfg.get("latitude", 50.1822))
     obs.lon = str(obs_cfg.get("longitude", 19.7925))
     obs.elevation = float(obs_cfg.get("elevation", 400))
 
-    if args.text:
-        telescope = NexStarScope(stdscr=None, tui=False)
-    else :
-        telescope = NexStarScope(stdscr=stdscr, tui=True)
+    telescope = NexStarScope(stdscr=stdscr, tui=not args.text)
 
     loop = asyncio.get_event_loop()
     
     scope = loop.run_until_complete(
                 asyncio.start_server(handle_port2000, host='', port=args.port))
-    
     stell = loop.run_until_complete(
-                loop.create_server(StellariumServer,host='',port=args.stellarium))
+                loop.create_server(StellariumServer, host='', port=args.stellarium))
     
-    telescope.print_msg('NSE simulator started on {}.'.format(scope.sockets[0].getsockname()))
-    telescope.print_msg('Hit CTRL-C to stop.')
+    telescope.print_msg(f'NSE simulator started on port {args.port}.')
     
     asyncio.ensure_future(broadcast(sport=args.port))
-    asyncio.ensure_future(timer(0.1,telescope))
-    asyncio.ensure_future(report_scope_pos(0.1,telescope,obs))
+    asyncio.ensure_future(timer(0.1, telescope))
+    asyncio.ensure_future(report_scope_pos(0.1, telescope, obs))
 
-    try :
+    try:
         loop.run_forever()
-    except KeyboardInterrupt :
+    except KeyboardInterrupt:
         pass
-    telescope.print_msg('Simulator shutting down')
-    scope.close()
-    loop.run_until_complete(scope.wait_closed())
-    stell.close()
-    loop.run_until_complete(stell.wait_closed())
-
-    loop.close()
+    finally:
+        scope.close()
+        stell.close()
+        loop.close()
 
 def start_simulator():
+    """Parses arguments and launches the simulator."""
     global config
     sim_cfg = config.get("simulator", {})
     parser = argparse.ArgumentParser(description='NexStar AUX Simulator')

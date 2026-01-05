@@ -3,53 +3,44 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-05
-- **Current Phase**: Phase 3 - Astronomical Transformations
+- **Current Phase**: Phase 3.5 - Code Documentation
 
 ## Project Progress
 
 ### Completed Tasks ✅
 - **Phase 1**: Repository initialization
-  - Git repository initialized
-  - Documentation created (README.md, CHANGELOG.md, .gitignore)
-  - Initial commit made (v0.1.0)
-  - GEMINI.md updated with current status
 - **Phase 2**: Simulator headless mode & TCP support
-  - Simulator refactored to support --text (headless) mode
-  - AUXCommunicator updated with socket:// support
-  - Echo skipping logic implemented in AUX protocol
-  - Driver aligned with indipydriver 3.0.4 API
 - **Phase 2.5**: Functional Test Suite
-  - Created robust test suite in `tests/test_functional.py`
-  - Verified Connection, Movement, Tracking, and Park logic
-  - Fixed driver robustness issues during testing
 - **Phase 3**: Astronomical Transformations
   - Integrated `ephem` for coordinate conversion
   - Added GEOGRAPHIC_COORD and EQUATORIAL_EOD_COORD properties
   - Implemented RA/Dec to Encoders GoTo logic
   - Implemented automatic RA/Dec reporting from Encoders
-  - Added central configuration support in `config.json` (Default: Bębło)
+  - Added central configuration support in `config.yaml` (Default: Bębło)
 
 ### In Progress 🔄
-- **Phase 3**: Verification and Polishing
-  - Creating automated tests for astronomical GoTo
+- **Phase 3.5**: Code Documentation (Docstrings)
+  - Adding Google Style docstrings to all modules
+  - Documenting AUX protocol internals and INDI mapping
 
 ### Pending Tasks 📋
-1. Implement tracking modes (Sidereal, Solar, Lunar)
-2. Add Focuser and GPS support
-3. Create automated test suite for tracking modes
+1. **Phase 4**: Anti-backlash GoTo logic
+   - Implement `GOTO_APPROACH_MODE` (FIXED_OFFSET, TRACKING_DIRECTION)
+   - Implement two-stage slew mechanism
+2. **Phase 5**: Advanced Predictive Tracking (2nd Order)
+   - Implement symmetric 2nd order differential algorithm for angular velocities
+   - Design extensible tracking loop (ready for Satellites/Comets)
+3. **Phase 6**: Functional Verification & Accessories
+   - Support for Focuser and GPS modules
+   - Comprehensive tracking drift tests
 
 ## Technical Notes
-
-### Test Suite
-- Run with: `./venv/bin/python tests/test_functional.py`
-- Logs: `test_sim.log` contains simulator output during tests
-
-### Next Actions
-- Integrate `ephem.Observer` into the driver
-- Map INDI RA/Dec properties to AUX MC commands
+- Current location: Bębło (50.1822 N, 19.7925 E)
+- Configuration format: YAML (`config.yaml`)
+- Test suite: `tests/test_functional.py`
 
 ## Repository State
 - **Branch**: main
-- **Last Commit**: def3033 - Add tracking support and complete extended control test
+- **Last Commit**: f77da2c - Switch configuration format from JSON to YAML
 - **Working Directory**: /home/jochym/Projects/INDI/auxdrv
-- **Git Status**: Clean (committed files ready)
+- **Git Status**: Clean (pre-documentation)

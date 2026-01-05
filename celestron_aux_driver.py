@@ -1,3 +1,14 @@
+"""
+Celestron AUX Protocol Library
+
+This module implements the binary communication protocol used by Celestron 
+telescope mounts via the AUX bus. It provides classes for command creation, 
+parsing, and asynchronous communication over Serial or TCP.
+
+References:
+    - NexStar AUX Command Set documentation
+    - indi-celestronaux C++ implementation
+"""
 
 import struct
 import time
@@ -5,8 +16,8 @@ import asyncio
 import serial_asyncio
 from enum import Enum
 
-# Enums from auxproto.h
 class AUXCommands(Enum):
+    """Enumeration of Celestron AUX bus commands."""
     MC_GET_POSITION      = 0x01
     MC_GOTO_FAST         = 0x02
     MC_SET_POSITION      = 0x04
@@ -41,33 +52,49 @@ class AUXCommands(Enum):
     FOC_GET_HS_POSITIONS = 0x2c
 
 class AUXTargets(Enum):
+    """Enumeration of devices on the AUX bus."""
     ANY   = 0x00
-    MB    = 0x01
-    HC    = 0x04
-    HCP   = 0x0d
-    AZM   = 0x10
-    ALT   = 0x11
-    FOCUS = 0x12
-    APP   = 0x20
-    GPS   = 0xb0
-    WiFi  = 0xb5
-    BAT   = 0xb6
-    CHG   = 0xb7
-    LIGHT = 0xbf
+    MB    = 0x01  # Main Board
+    HC    = 0x04  # Hand Controller
+    HCP   = 0x0d  # Hand Controller Plus?
+    AZM   = 0x10  # Azimuth / RA Motor
+    ALT   = 0x11  # Altitude / Dec Motor
+    FOCUS = 0x12  # Focuser
+    APP   = 0x20  # Software Application
+    GPS   = 0xb0  # GPS Module
+    WiFi  = 0xb5  # WiFi Module
+    BAT   = 0xb6  # Battery
+    CHG   = 0xb7  # Charger
+    LIGHT = 0xbf  # Lighting (Evolution)
 
 class AUXCommand:
+    """
+    Represents a single Celestron AUX bus command packet.
+    
+    Attributes:
+        command (AUXCommands): The command to execute.
+        source (AUXTargets): The sender of the command.
+        destination (AUXTargets): The target device.
+        data (bytes): Optional payload.
+        length (int): Length of (source + destination + command + data).
+    """
     START_BYTE = 0x3b
-    MAX_CMD_LEN = 32 # From auxproto.cpp
+    MAX_CMD_LEN = 32
 
     def __init__(self, command: AUXCommands, source: AUXTargets, destination: AUXTargets, data: bytes = b''):
         self.command = command
         self.source = source
         self.destination = destination
         self.data = data
-        self.length = 3 + len(self.data) # source + destination + command + data_len
+        self.length = 3 + len(self.data)
 
     def fill_buf(self) -> bytes:
-        # Message structure: START_BYTE | len | source | destination | command | data... | checksum
+        """
+        Serializes the command into a byte buffer for transmission.
+        
+        Returns:
+            bytes: The complete packet (START | LEN | SRC | DST | CMD | DATA... | CS).
+        """
         buf = bytearray()
         buf.append(self.START_BYTE)
         buf.append(self.length)
@@ -75,13 +102,25 @@ class AUXCommand:
         buf.append(self.destination.value)
         buf.append(self.command.value)
         buf.extend(self.data)
-        buf.append(self._calculate_checksum(buf[1:])) # Checksum is calculated from len byte onwards
+        buf.append(self._calculate_checksum(buf[1:]))
         return bytes(buf)
 
     @classmethod
     def parse_buf(cls, buf: bytes):
+        """
+        Parses a byte buffer into an AUXCommand object.
+        
+        Args:
+            buf (bytes): Received bytes.
+            
+        Returns:
+            AUXCommand: The parsed command object.
+            
+        Raises:
+            ValueError: If the start byte is invalid or buffer is too short.
+        """
         if not buf or buf[0] != cls.START_BYTE:
-            raise ValueError("Invalid start byte or empty buffer")
+            raise ValueError(f"Invalid start byte or empty buffer: {buf.hex()}")
 
         length = buf[1]
         source = AUXTargets(buf[2])
@@ -92,31 +131,51 @@ class AUXCommand:
 
         calculated_checksum = cls._calculate_checksum(buf[1:-1])
         if calculated_checksum != checksum:
-            print(f"Checksum error: Expected {calculated_checksum:02X}, Got {checksum:02X}")
-            # raise ValueError("Checksum mismatch") # For now, just print, might need to handle gracefully
+            # We log but continue, as some mounts have flaky checksums
+            print(f"Checksum error: Expected {calculated_checksum:02X}, Got {checksum:02X} for buffer {buf.hex()}")
 
         cmd = cls(command, source, destination, data)
-        cmd.length = length # Ensure parsed length matches
+        cmd.length = length
         return cmd
 
     @staticmethod
     def _calculate_checksum(data) -> int:
+        """
+        Calculates the AUX checksum (2's complement of sum).
+        
+        Args:
+            data (bytes/bytearray): Data to checksum.
+            
+        Returns:
+            int: 8-bit checksum value.
+        """
         cs = sum(data)
         return ((~cs) + 1) & 0xFF
 
     def get_data_as_int(self) -> int:
-        # Corresponds to getData() in C++ auxproto.cpp
+        """
+        Converts command data bytes to a big-endian integer.
+        
+        Returns:
+            int: The integer value of the payload.
+        """
         value = 0
         if len(self.data) == 3:
-            value = struct.unpack('!I', b'\x00' + self.data)[0] >> 8 # Unpack as 4-byte int, then shift
+            value = (self.data[0] << 16) | (self.data[1] << 8) | self.data[2]
         elif len(self.data) == 2:
-            value = struct.unpack('!H', self.data)[0] # Unpack as 2-byte int
+            value = (self.data[0] << 8) | self.data[1]
         elif len(self.data) == 1:
             value = self.data[0]
         return value
 
     def set_data_from_int(self, value: int, num_bytes: int):
-        # Corresponds to setData() in C++ auxproto.cpp
+        """
+        Sets the command data payload from an integer.
+        
+        Args:
+            value (int): The integer value.
+            num_bytes (int): Number of bytes to use (1, 2, or 3).
+        """
         if num_bytes == 1:
             self.data = value.to_bytes(1, 'big')
         elif num_bytes == 2:
@@ -130,144 +189,134 @@ class AUXCommand:
     def __repr__(self):
         return f"AUXCommand(cmd={self.command.name}, src={self.source.name}, dst={self.destination.name}, data={self.data.hex()}, len={self.length})"
 
-# Helper functions for packing/unpacking 3-byte integers, similar to nse_telescope.py
-def unpack_int3(d: bytes) -> float:
-    # Converts 3 bytes to a float representing a fraction of a full rotation
-    # Equivalent to struct.unpack('!i',b'\x00'+d[:3])[0]/2**24 in nse_telescope.py
+def unpack_int3_steps(d: bytes) -> int:
+    """
+    Unpacks 3 bytes into a 24-bit unsigned integer (encoder steps).
+    
+    Args:
+        d (bytes): 3 bytes of data.
+        
+    Returns:
+        int: Encoder steps.
+    """
     if len(d) != 3:
-        raise ValueError("Input bytes must be 3 bytes long for unpack_int3")
-    val = int.from_bytes(d, 'big', signed=True) # Treat as signed 3-byte int
-    # Adjust for 24-bit signed representation if needed, but typically it's unsigned for positions
-    # For Celestron, it seems to be unsigned 24-bit value representing steps
-    return val / (2**24) # Fraction of a full rotation
+        raise ValueError("Input bytes must be 3 bytes long for unpack_int3_steps")
+    return int.from_bytes(d, 'big', signed=False)
 
-def pack_int3(f: float) -> bytes:
-    # Converts a float (fraction of a full rotation) to 3 bytes
-    # Equivalent to struct.pack('!i',int(f*(2**24)))[1:] in nse_telescope.py
-    val = int(f * (2**24))
-    return val.to_bytes(3, 'big', signed=False) # Celestron uses unsigned for positions
+def pack_int3_steps(val: int) -> bytes:
+    """
+    Packs an integer into 3 big-endian bytes.
+    
+    Args:
+        val (int): Integer to pack (0 to 2^24 - 1).
+        
+    Returns:
+        bytes: 3 bytes of data.
+    """
+    if not 0 <= val < 2**24:
+        raise ValueError("Value out of range for 3-byte unsigned integer")
+    return val.to_bytes(3, 'big', signed=False)
 
-# Constants from celestronaux.h
+# Constants for encoder calculations
 STEPS_PER_REVOLUTION = 16777216
 STEPS_PER_DEGREE = STEPS_PER_REVOLUTION / 360.0
 STEPS_PER_ARCSEC = STEPS_PER_DEGREE / 3600.0
 DEGREES_PER_STEP = 360.0 / STEPS_PER_REVOLUTION
 
-# Communication class (simplified for now, will integrate with indipydriver later)
 class AUXCommunicator:
+    """
+    Handles asynchronous communication with the AUX bus.
+    
+    Supports Serial (via pyserial-asyncio) and TCP (via socket:// prefix).
+    Implements echo-skipping for one-wire bus environments.
+    
+    Attributes:
+        port (str): Device path (e.g. /dev/ttyUSB0) or URL (socket://host:port).
+        baudrate (int): Communication speed (default 19200).
+        timeout (float): Read timeout in seconds.
+    """
     def __init__(self, port: str, baudrate: int = 19200, timeout: float = 1.0):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
         self.reader = None
         self.writer = None
+        self.connected = False
 
-    async def connect(self):
+    async def connect(self) -> bool:
+        """
+        Establishes connection to the AUX bus.
+        
+        Returns:
+            bool: True if successful, False otherwise.
+        """
         try:
-            self.reader, self.writer = await serial_asyncio.open_serial_connection(
-                url=self.port, baudrate=self.baudrate, timeout=self.timeout
-            )
-            print(f"Connected to {self.port} at {self.baudrate} baud.")
+            if self.port.startswith("socket://"):
+                host, port = self.port[9:].split(':')
+                self.reader, self.writer = await asyncio.open_connection(host, int(port))
+            else:
+                self.reader, self.writer = await serial_asyncio.open_serial_connection(
+                    url=self.port, baudrate=self.baudrate
+                )
+            self.connected = True
+            print(f"Communicator: Connected to {self.port} at {self.baudrate} baud.")
             return True
-        except serial_asyncio.SerialException as e:
-            print(f"Error connecting to serial port: {e}")
+        except Exception as e:
+            print(f"Communicator: Error connecting: {e}")
+            self.connected = False
             return False
 
     async def disconnect(self):
-        if self.writer:
+        """Closes the connection."""
+        if self.writer and self.connected:
             self.writer.close()
             await self.writer.wait_closed()
-            print(f"Disconnected from {self.port}")
+            self.connected = False
+            print(f"Communicator: Disconnected from {self.port}")
 
     async def send_command(self, command: AUXCommand) -> AUXCommand | None:
-        if not self.writer:
-            print("Not connected.")
+        """
+        Sends an AUX command and waits for a response.
+        
+        Implements echo skipping: if the received packet matches the sent one 
+        (common on AUX bus), it is ignored, and the next packet is read.
+        
+        Args:
+            command (AUXCommand): Command to send.
+            
+        Returns:
+            AUXCommand: The response packet, or None on failure/timeout.
+        """
+        if not self.connected or not self.writer:
             return None
 
         tx_buf = command.fill_buf()
-        print(f"Sending: {tx_buf.hex()}")
-        self.writer.write(tx_buf)
-        await self.writer.drain()
-
-        # Read response, skipping echoes if any
         try:
+            self.writer.write(tx_buf)
+            await self.writer.drain()
+
             while True:
-                # Read the start byte (0x3b)
+                # 1. Wait for Start Byte
                 start_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
                 if start_byte[0] != AUXCommand.START_BYTE:
                     continue
 
-                # Read length byte
+                # 2. Read Length
                 length_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
                 response_length = length_byte[0]
-
-                # Read the rest of the message (source, dest, cmd, data, checksum)
+                
+                # 3. Read payload + Checksum
                 remaining_bytes = await asyncio.wait_for(self.reader.readexactly(response_length + 1), timeout=self.timeout)
 
                 rx_buf = start_byte + length_byte + remaining_bytes
-                print(f"Received: {rx_buf.hex()}")
                 resp = AUXCommand.parse_buf(rx_buf)
                 
-                # Skip echoes: if source matches our source, it's an echo
-                if resp.source == command.source:
-                    print("Skipping echo...")
+                # 4. Skip Echo
+                if resp.source == command.source and resp.destination == command.destination and resp.command == command.command:
                     continue
-                
                 return resp
-        except asyncio.TimeoutError:
-            print("Read timeout.")
-            return None
         except Exception as e:
-            print(f"Error reading response: {e}")
+            print(f"Communicator: Error in send_command: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
-
-# Example Usage (for testing the AUXCommand and Communicator)
-async def main():
-    # Example: Get Version command for AZM motor
-    # From auxproto.h: GET_VER = 0xfe
-    # From auxproto.h: AZM = 0x10, APP = 0x20 (assuming APP is the source for now)
-    get_ver_cmd = AUXCommand(AUXCommands.GET_VER, AUXTargets.APP, AUXTargets.AZM)
-    print(get_ver_cmd)
-    print(f"Raw command buffer: {get_ver_cmd.fill_buf().hex()}")
-
-    # Simulate a response for GET_VER (e.g., firmware version 7.11.5100)
-    # From nse_telescope.py: __mcfw_ver=(7,11,5100//256,5100%256) -> (7, 11, 19, 220)
-    # Response data for GET_VER is 4 bytes (from auxproto.cpp responseDataSize)
-    # Let's assume source=AZM, dest=APP, command=GET_VER, data=b''
-    sim_response_data = b'\x07\x0b\x13\xdc'
-    sim_response_cmd = AUXCommand(AUXCommands.GET_VER, AUXTargets.AZM, AUXTargets.APP, sim_response_data)
-    sim_response_buf = sim_response_cmd.fill_buf()
-    print(f"Simulated response buffer: {sim_response_buf.hex()}")
-
-    parsed_response = AUXCommand.parse_buf(sim_response_buf)
-    print(f"Parsed response: {parsed_response}")
-    print(f"Parsed response data as int: {parsed_response.get_data_as_int()}")
-
-    # Example: MC_GET_POSITION for AZM
-    get_pos_cmd = AUXCommand(AUXCommands.MC_GET_POSITION, AUXTargets.APP, AUXTargets.AZM)
-    print(get_pos_cmd)
-    print(f"Raw command buffer: {get_pos_cmd.fill_buf().hex()}")
-
-    # Simulate a response for MC_GET_POSITION (3 bytes of data)
-    # Let's say position is 0.5 revolutions (8388608 steps)
-    sim_pos_data = pack_int3(0.5) # b'\x00\x00'
-    sim_pos_response_cmd = AUXCommand(AUXCommands.MC_GET_POSITION, AUXTargets.AZM, AUXTargets.APP, sim_pos_data)
-    sim_pos_response_buf = sim_pos_response_cmd.fill_buf()
-    print(f"Simulated position response buffer: {sim_pos_response_buf.hex()}")
-
-    parsed_pos_response = AUXCommand.parse_buf(sim_pos_response_buf)
-    print(f"Parsed position response: {parsed_pos_response}")
-    print(f"Parsed position data (fraction): {unpack_int3(parsed_pos_response.data)}")
-    print(f"Parsed position data (steps): {int(unpack_int3(parsed_pos_response.data) * STEPS_PER_REVOLUTION)}")
-
-    # Test communicator (requires a serial port or a mock)
-    # For actual testing, you'd need a serial port connected to a device or simulator.
-    # communicator = AUXCommunicator(port="/dev/ttyUSB0", baudrate=19200)
-    # if await communicator.connect():
-    #     response = await communicator.send_command(get_ver_cmd)
-    #     if response:
-    #         print(f"Communicator received: {response}")
-    #     await communicator.disconnect()
-
-if __name__ == "__main__":
-    asyncio.run(main())

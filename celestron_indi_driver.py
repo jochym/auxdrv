@@ -1,12 +1,31 @@
+"""
+Celestron AUX INDI Driver
+
+This module implements an INDI driver for Celestron mounts using the AUX protocol.
+It uses the `indipydriver` library for INDI communication and `ephem` for 
+astronomical calculations.
+
+Configuration is loaded from `config.yaml`.
+"""
+
 import asyncio
-import serial_asyncio
-from enum import Enum
 import indipydriver
-from indipydriver import IPyDriver, Device, SwitchVector, SwitchMember, TextVector, TextMember, NumberVector, NumberMember, LightVector, LightMember
+from indipydriver import (
+    IPyDriver, Device, SwitchVector, SwitchMember, 
+    TextVector, TextMember, NumberVector, NumberMember, 
+    LightVector, LightMember
+)
 import ephem
 from datetime import datetime
 import yaml
 import os
+
+# Import AUX protocol implementation
+from celestron_aux_driver import (
+    AUXCommands, AUXTargets, AUXCommand, 
+    AUXCommunicator, pack_int3_steps, unpack_int3_steps,
+    STEPS_PER_REVOLUTION
+)
 
 # Load configuration
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
@@ -19,6 +38,7 @@ DEFAULT_CONFIG = {
 }
 
 def load_config():
+    """Loads configuration from YAML file or returns defaults."""
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r') as f:
@@ -30,270 +50,18 @@ def load_config():
 config = load_config()
 obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
 
-# Enums from auxproto.h
-class AUXCommands(Enum):
-    MC_GET_POSITION      = 0x01
-    MC_GOTO_FAST         = 0x02
-    MC_SET_POSITION      = 0x04
-    MC_GET_MODEL         = 0x05
-    MC_SET_POS_GUIDERATE = 0x06
-    MC_SET_NEG_GUIDERATE = 0x07
-    MC_LEVEL_START       = 0x0b
-    MC_LEVEL_DONE        = 0x12
-    MC_SLEW_DONE         = 0x13
-    MC_GOTO_SLOW         = 0x17
-    MC_SEEK_DONE         = 0x18
-    MC_SEEK_INDEX        = 0x19
-    MC_MOVE_POS          = 0x24
-    MC_MOVE_NEG          = 0x25
-    MC_AUX_GUIDE         = 0x26
-    MC_AUX_GUIDE_ACTIVE  = 0x27
-    MC_ENABLE_CORDWRAP   = 0x38
-    MC_DISABLE_CORDWRAP  = 0x39
-    MC_SET_CORDWRAP_POS  = 0x3a
-    MC_POLL_CORDWRAP     = 0x3b
-    MC_GET_CORDWRAP_POS  = 0x3c
-    MC_SET_AUTOGUIDE_RATE = 0x46
-    MC_GET_AUTOGUIDE_RATE = 0x47
-    GET_VER              = 0xfe
-    GPS_GET_LAT          = 0x01
-    GPS_GET_LONG         = 0x02
-    GPS_GET_DATE         = 0x03
-    GPS_GET_YEAR         = 0x04
-    GPS_GET_TIME         = 0x33
-    GPS_TIME_VALID       = 0x36
-    GPS_LINKED           = 0x37
-    FOC_GET_HS_POSITIONS = 0x2c
-
-class AUXTargets(Enum):
-    ANY   = 0x00
-    MB    = 0x01
-    HC    = 0x04
-    HCP   = 0x0d
-    AZM   = 0x10
-    ALT   = 0x11
-    FOCUS = 0x12
-    APP   = 0x20
-    GPS   = 0xb0
-    WiFi  = 0xb5
-    BAT   = 0xb6
-    CHG   = 0xb7
-    LIGHT = 0xbf
-
-class AUXCommand:
-    START_BYTE = 0x3b
-    MAX_CMD_LEN = 32
-
-    def __init__(self, command: AUXCommands, source: AUXTargets, destination: AUXTargets, data: bytes = b''):
-        self.command = command
-        self.source = source
-        self.destination = destination
-        self.data = data
-        self.length = 3 + len(self.data)
-
-    def fill_buf(self) -> bytes:
-        buf = bytearray()
-        buf.append(self.START_BYTE)
-        buf.append(self.length)
-        buf.append(self.source.value)
-        buf.append(self.destination.value)
-        buf.append(self.command.value)
-        buf.extend(self.data)
-        buf.append(self._calculate_checksum(buf[1:]))
-        return bytes(buf)
-
-    @classmethod
-    def parse_buf(cls, buf: bytes):
-        if not buf or buf[0] != cls.START_BYTE:
-            raise ValueError(f"Invalid start byte or empty buffer: {buf.hex()}")
-
-        length = buf[1]
-        source = AUXTargets(buf[2])
-        destination = AUXTargets(buf[3])
-        command = AUXCommands(buf[4])
-        data = buf[5:-1]
-        checksum = buf[-1]
-
-        calculated_checksum = cls._calculate_checksum(buf[1:-1])
-        if calculated_checksum != checksum:
-            print(f"Checksum error: Expected {calculated_checksum:02X}, Got {checksum:02X} for buffer {buf.hex()}")
-
-        cmd = cls(command, source, destination, data)
-        cmd.length = length
-        return cmd
-
-    @staticmethod
-    def _calculate_checksum(data) -> int:
-        cs = sum(data)
-        return ((~cs) + 1) & 0xFF
-
-    def get_data_as_int(self) -> int:
-        value = 0
-        if len(self.data) == 3:
-            value = (self.data[0] << 16) | (self.data[1] << 8) | self.data[2]
-        elif len(self.data) == 2:
-            value = (self.data[0] << 8) | self.data[1]
-        elif len(self.data) == 1:
-            value = self.data[0]
-        return value
-
-    def set_data_from_int(self, value: int, num_bytes: int):
-        if num_bytes == 1:
-            self.data = value.to_bytes(1, 'big')
-        elif num_bytes == 2:
-            self.data = value.to_bytes(2, 'big')
-        elif num_bytes == 3:
-            self.data = value.to_bytes(3, 'big')
-        else:
-            raise ValueError("num_bytes must be 1, 2, or 3")
-        self.length = 3 + len(self.data)
-
-    def __repr__(self):
-        return f"AUXCommand(cmd={self.command.name}, src={self.source.name}, dst={self.destination.name}, data={self.data.hex()}, len={self.length})"
-
-def unpack_int3_steps(d: bytes) -> int:
-    if len(d) != 3:
-        raise ValueError("Input bytes must be 3 bytes long for unpack_int3_steps")
-    val = int.from_bytes(d, 'big', signed=False)
-    return val
-
-def pack_int3_steps(val: int) -> bytes:
-    if not 0 <= val < 2**24:
-        raise ValueError("Value out of range for 3-byte unsigned integer")
-    return val.to_bytes(3, 'big', signed=False)
-
-STEPS_PER_REVOLUTION = 16777216
-STEPS_PER_DEGREE = STEPS_PER_REVOLUTION / 360.0
-STEPS_PER_ARCSEC = STEPS_PER_DEGREE / 3600.0
-DEGREES_PER_STEP = 360.0 / STEPS_PER_REVOLUTION
-
-class AUXCommunicator:
-    def __init__(self, port: str, baudrate: int = 19200, timeout: float = 1.0):
-        self.port = port
-        self.baudrate = baudrate
-        self.timeout = timeout
-        self.reader = None
-        self.writer = None
-        self.connected = False
-
-    async def connect(self):
-        try:
-            if self.port.startswith("socket://"):
-                host, port = self.port[9:].split(':')
-                self.reader, self.writer = await asyncio.open_connection(host, int(port))
-            else:
-                self.reader, self.writer = await serial_asyncio.open_serial_connection(
-                    url=self.port, baudrate=self.baudrate
-                )
-            self.connected = True
-            print(f"Communicator: Connected to {self.port} at {self.baudrate} baud.")
-            return True
-        except Exception as e:
-            print(f"Communicator: Error connecting: {e}")
-            self.connected = False
-            return False
-
-    async def disconnect(self):
-        if self.writer and self.connected:
-            self.writer.close()
-            await self.writer.wait_closed()
-            self.connected = False
-            print(f"Communicator: Disconnected from {self.port}")
-
-    async def send_command(self, command: AUXCommand) -> AUXCommand | None:
-        if not self.connected or not self.writer:
-            return None
-
-        tx_buf = command.fill_buf()
-        try:
-            self.writer.write(tx_buf)
-            await self.writer.drain()
-
-            while True:
-                start_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
-                if start_byte[0] != AUXCommand.START_BYTE:
-                    continue
-
-                length_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
-                response_length = length_byte[0]
-                remaining_bytes = await asyncio.wait_for(self.reader.readexactly(response_length + 1), timeout=self.timeout)
-
-                rx_buf = start_byte + length_byte + remaining_bytes
-                resp = AUXCommand.parse_buf(rx_buf)
-                if resp.source == command.source:
-                    continue
-                return resp
-        except Exception as e:
-            print(f"Communicator: Error: {e}")
-            return None
-
 class CelestronAUXDriver(IPyDriver):
+    """
+    INDI Driver for Celestron mounts.
+    
+    Manages INDI properties, hardware communication via AUX bus, 
+    and coordinate transformations.
+    """
     def __init__(self, driver_name: str = "Celestron AUX"):
-        # Define properties and members
-        self.conn_connect = SwitchMember("CONNECT", "Connect", "Off")
-        self.conn_disconnect = SwitchMember("DISCONNECT", "Disconnect", "On")
-        self.connection_vector = SwitchVector("CONNECTION", "Connection", "Main", "rw", "OneOfMany", "Idle", [self.conn_connect, self.conn_disconnect])
+        # 1. Define INDI properties
+        self._init_properties()
 
-        self.port_name = TextMember("PORT_NAME", "Port Name", "/dev/ttyUSB0")
-        self.baud_rate = NumberMember("BAUD_RATE", "Baud Rate", "%d", 9600, 115200, 1, 19200)
-        self.port_vector = TextVector("PORT", "Serial Port", "Main", "rw", "Idle", [self.port_name])
-        self.baud_vector = NumberVector("BAUD", "Baud Rate", "Main", "rw", "Idle", [self.baud_rate])
-
-        self.model = TextMember("MODEL", "Model", "Unknown")
-        self.hc_ver = TextMember("HC_VERSION", "HC Version", "Unknown")
-        self.azm_ver = TextMember("AZM_VERSION", "AZM Version", "Unknown")
-        self.alt_ver = TextMember("ALT_VERSION", "ALT Version", "Unknown")
-        self.firmware_vector = TextVector("FIRMWARE_INFO", "Firmware Info", "Main", "ro", "Idle", [self.model, self.hc_ver, self.azm_ver, self.alt_ver])
-
-        self.azm_steps = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
-        self.alt_steps = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
-        self.mount_position_vector = NumberVector("MOUNT_POSITION", "Mount Position", "Main", "ro", "Idle", [self.azm_steps, self.alt_steps])
-
-        self.slewing_light = LightMember("SLEWING", "Slewing", "Idle")
-        self.tracking_light = LightMember("TRACKING", "Tracking", "Idle")
-        self.parked_light = LightMember("PARKED", "Parked", "Idle")
-        self.mount_status_vector = LightVector("MOUNT_STATUS", "Mount Status", "Main", "Idle", [self.slewing_light, self.tracking_light, self.parked_light])
-
-        self.slew_rate = NumberMember("RATE", "Rate (1-9)", "%d", 1, 9, 1, 1)
-        self.slew_rate_vector = NumberVector("SLEW_RATE", "Slew Rate", "Main", "rw", "Idle", [self.slew_rate])
-
-        self.motion_n = SwitchMember("MOTION_N", "North", "Off")
-        self.motion_s = SwitchMember("MOTION_S", "South", "Off")
-        self.motion_ns_vector = SwitchVector("TELESCOPE_MOTION_NS", "Motion N/S", "Main", "rw", "AtMostOne", "Idle", [self.motion_n, self.motion_s])
-
-        self.motion_w = SwitchMember("MOTION_W", "West", "Off")
-        self.motion_e = SwitchMember("MOTION_E", "East", "Off")
-        self.motion_we_vector = SwitchVector("TELESCOPE_MOTION_WE", "Motion W/E", "Main", "rw", "AtMostOne", "Idle", [self.motion_w, self.motion_e])
-
-        self.target_azm = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
-        self.target_alt = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
-        self.absolute_coord_vector = NumberVector("TELESCOPE_ABSOLUTE_COORD", "Absolute Coordinates", "Main", "rw", "Idle", [self.target_azm, self.target_alt])
-
-        self.guide_azm = NumberMember("GUIDE_AZM", "AZM Guide Rate", "%d", 0, 255, 1, 0)
-        self.guide_alt = NumberMember("GUIDE_ALT", "ALT Guide Rate", "%d", 0, 255, 1, 0)
-        self.guide_rate_vector = NumberVector("TELESCOPE_GUIDE_RATE", "Guide Rates", "Main", "rw", "Idle", [self.guide_azm, self.guide_alt])
-
-        self.sync_switch = SwitchMember("SYNC", "Sync", "Off")
-        self.sync_vector = SwitchVector("TELESCOPE_SYNC", "Sync Mount", "Main", "rw", "AtMostOne", "Idle", [self.sync_switch])
-
-        self.park_switch = SwitchMember("PARK", "Park", "Off")
-        self.park_vector = SwitchVector("TELESCOPE_PARK", "Park Mount", "Main", "rw", "AtMostOne", "Idle", [self.park_switch])
-
-        self.unpark_switch = SwitchMember("UNPARK", "Unpark", "Off")
-        self.unpark_vector = SwitchVector("TELESCOPE_UNPARK", "Unpark Mount", "Main", "rw", "AtMostOne", "Idle", [self.unpark_switch])
-
-        # Geographical location (standard INDI property)
-        self.lat = NumberMember("LAT", "Latitude (deg)", " %06.2f", -90, 90, 0, obs_cfg.get("latitude", 50.1822))
-        self.long = NumberMember("LONG", "Longitude (deg)", " %06.2f", -360, 360, 0, obs_cfg.get("longitude", 19.7925))
-        self.elev = NumberMember("ELEV", "Elevation (m)", " %04.0f", -1000, 10000, 0, obs_cfg.get("elevation", 400))
-        self.location_vector = NumberVector("GEOGRAPHIC_COORD", "Location", "Site", "rw", "Idle", [self.lat, self.long, self.elev])
-
-        # Equatorial coordinates (standard INDI property)
-        self.ra = NumberMember("RA", "Right Ascension (h)", "%08.3f", 0, 24, 0, 0)
-        self.dec = NumberMember("DEC", "Declination (deg)", "%08.3f", -90, 90, 0, 0)
-        self.equatorial_vector = NumberVector("EQUATORIAL_EOD_COORD", "Equatorial JNow", "Main", "rw", "Idle", [self.ra, self.dec])
-
-        # Create device
+        # 2. Initialize device with properties
         self.device = Device("Celestron AUX", [
             self.connection_vector, self.port_vector, self.baud_vector, self.firmware_vector,
             self.mount_position_vector, self.mount_status_vector, self.slew_rate_vector,
@@ -307,20 +75,92 @@ class CelestronAUXDriver(IPyDriver):
         self.current_azm_steps = 0
         self.current_alt_steps = 0
         
-        # ephem Observer for transformations
+        # 3. ephem Observer for RA/Dec <-> Alt/Az transformations
         self.observer = ephem.Observer()
         self.update_observer()
 
+    def _init_properties(self):
+        """Initializes all INDI property vectors and members."""
+        # Connection
+        self.conn_connect = SwitchMember("CONNECT", "Connect", "Off")
+        self.conn_disconnect = SwitchMember("DISCONNECT", "Disconnect", "On")
+        self.connection_vector = SwitchVector("CONNECTION", "Connection", "Main", "rw", "OneOfMany", "Idle", [self.conn_connect, self.conn_disconnect])
+
+        # Port settings
+        self.port_name = TextMember("PORT_NAME", "Port Name", "/dev/ttyUSB0")
+        self.baud_rate = NumberMember("BAUD_RATE", "Baud Rate", "%d", 9600, 115200, 1, 19200)
+        self.port_vector = TextVector("PORT", "Serial Port", "Main", "rw", "Idle", [self.port_name])
+        self.baud_vector = NumberVector("BAUD", "Baud Rate", "Main", "rw", "Idle", [self.baud_rate])
+
+        # Firmware Info
+        self.model = TextMember("MODEL", "Model", "Unknown")
+        self.hc_ver = TextMember("HC_VERSION", "HC Version", "Unknown")
+        self.azm_ver = TextMember("AZM_VERSION", "AZM Version", "Unknown")
+        self.alt_ver = TextMember("ALT_VERSION", "ALT Version", "Unknown")
+        self.firmware_vector = TextVector("FIRMWARE_INFO", "Firmware Info", "Main", "ro", "Idle", [self.model, self.hc_ver, self.azm_ver, self.alt_ver])
+
+        # Raw position (Steps)
+        self.azm_steps = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.alt_steps = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.mount_position_vector = NumberVector("MOUNT_POSITION", "Mount Position", "Main", "ro", "Idle", [self.azm_steps, self.alt_steps])
+
+        # Status indicators
+        self.slewing_light = LightMember("SLEWING", "Slewing", "Idle")
+        self.tracking_light = LightMember("TRACKING", "Tracking", "Idle")
+        self.parked_light = LightMember("PARKED", "Parked", "Idle")
+        self.mount_status_vector = LightVector("MOUNT_STATUS", "Mount Status", "Main", "Idle", [self.slewing_light, self.tracking_light, self.parked_light])
+
+        # Motion control
+        self.slew_rate = NumberMember("RATE", "Rate (1-9)", "%d", 1, 9, 1, 1)
+        self.slew_rate_vector = NumberVector("SLEW_RATE", "Slew Rate", "Main", "rw", "Idle", [self.slew_rate])
+
+        self.motion_n = SwitchMember("MOTION_N", "North", "Off")
+        self.motion_s = SwitchMember("MOTION_S", "South", "Off")
+        self.motion_ns_vector = SwitchVector("TELESCOPE_MOTION_NS", "Motion N/S", "Main", "rw", "AtMostOne", "Idle", [self.motion_n, self.motion_s])
+
+        self.motion_w = SwitchMember("MOTION_W", "West", "Off")
+        self.motion_e = SwitchMember("MOTION_E", "East", "Off")
+        self.motion_we_vector = SwitchVector("TELESCOPE_MOTION_WE", "Motion W/E", "Main", "rw", "AtMostOne", "Idle", [self.motion_w, self.motion_e])
+
+        # Coordinates
+        self.target_azm = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.target_alt = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.absolute_coord_vector = NumberVector("TELESCOPE_ABSOLUTE_COORD", "Absolute Coordinates", "Main", "rw", "Idle", [self.target_azm, self.target_alt])
+
+        self.guide_azm = NumberMember("GUIDE_AZM", "AZM Guide Rate", "%d", 0, 255, 1, 0)
+        self.guide_alt = NumberMember("GUIDE_ALT", "ALT Guide Rate", "%d", 0, 255, 1, 0)
+        self.guide_rate_vector = NumberVector("TELESCOPE_GUIDE_RATE", "Guide Rates", "Main", "rw", "Idle", [self.guide_azm, self.guide_alt])
+
+        # Standard Mount Actions
+        self.sync_switch = SwitchMember("SYNC", "Sync", "Off")
+        self.sync_vector = SwitchVector("TELESCOPE_SYNC", "Sync Mount", "Main", "rw", "AtMostOne", "Idle", [self.sync_switch])
+
+        self.park_switch = SwitchMember("PARK", "Park", "Off")
+        self.park_vector = SwitchVector("TELESCOPE_PARK", "Park Mount", "Main", "rw", "AtMostOne", "Idle", [self.park_switch])
+
+        self.unpark_switch = SwitchMember("UNPARK", "Unpark", "Off")
+        self.unpark_vector = SwitchVector("TELESCOPE_UNPARK", "Unpark Mount", "Main", "rw", "AtMostOne", "Idle", [self.unpark_switch])
+
+        # Geographical location
+        self.lat = NumberMember("LAT", "Latitude (deg)", " %06.2f", -90, 90, 0, obs_cfg.get("latitude", 50.1822))
+        self.long = NumberMember("LONG", "Longitude (deg)", " %06.2f", -360, 360, 0, obs_cfg.get("longitude", 19.7925))
+        self.elev = NumberMember("ELEV", "Elevation (m)", " %04.0f", -1000, 10000, 0, obs_cfg.get("elevation", 400))
+        self.location_vector = NumberVector("GEOGRAPHIC_COORD", "Location", "Site", "rw", "Idle", [self.lat, self.long, self.elev])
+
+        # Equatorial coordinates
+        self.ra = NumberMember("RA", "Right Ascension (h)", "%08.3f", 0, 24, 0, 0)
+        self.dec = NumberMember("DEC", "Declination (deg)", "%08.3f", -90, 90, 0, 0)
+        self.equatorial_vector = NumberVector("EQUATORIAL_EOD_COORD", "Equatorial JNow", "Main", "rw", "Idle", [self.ra, self.dec])
+
     def update_observer(self):
-        # ephem expects longitude/latitude in radians, and longitude is East-positive in ephem
-        # INDI standard: Longitude is degrees, East is positive. ephem Longitude: Radians, East is positive.
-        import math
+        """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
         self.observer.date = datetime.utcnow()
 
     async def rxevent(self, event):
+        """Main event handler for INDI property updates."""
         if event.vectorname == "CONNECTION":
             await self.handle_connection(event)
         elif event.vectorname == "PORT":
@@ -354,6 +194,7 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_equatorial_goto(event)
 
     async def handle_connection(self, event):
+        """Handles CONNECT/DISCONNECT switches."""
         if event and event.root:
             self.connection_vector.update(event.root)
         if self.conn_connect.membervalue == "On":
@@ -372,16 +213,17 @@ class CelestronAUXDriver(IPyDriver):
             await self.connection_vector.send_setVector(state="Idle")
 
     async def get_firmware_info(self):
+        """Retrieves model and version info from the mount."""
         if not self.communicator or not self.communicator.connected: return
         
-        # Model
+        # Get Model
         resp = await self.communicator.send_command(AUXCommand(AUXCommands.MC_GET_MODEL, AUXTargets.APP, AUXTargets.AZM))
         if resp:
             model_id = resp.get_data_as_int()
             model_map = {0x0001: "Nexstar GPS", 0x0783: "Nexstar SLT", 0x0b83: "4/5SE", 0x0c82: "6/8SE", 0x1189: "CPC Deluxe", 0x1283: "GT Series", 0x1485: "AVX", 0x1687: "Evolution", 0x1788: "CGX"}
             self.model.membervalue = model_map.get(model_id, f"Unknown (0x{model_id:04X})")
         
-        # Versions
+        # Get Versions
         for target, member in [(AUXTargets.AZM, self.azm_ver), (AUXTargets.ALT, self.alt_ver), (AUXTargets.HC, self.hc_ver)]:
             resp = await self.communicator.send_command(AUXCommand(AUXCommands.GET_VER, AUXTargets.APP, target))
             if resp and len(resp.data) == 4:
@@ -390,6 +232,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.firmware_vector.send_setVector(state="Ok")
 
     async def read_mount_position(self):
+        """Periodically reads encoder steps and updates RA/Dec."""
         if not self.communicator or not self.communicator.connected: return
         
         # AZM
@@ -413,6 +256,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.equatorial_vector.send_setVector(state="Ok")
 
     async def handle_motion_ns(self, event):
+        """Handles manual North/South slew commands."""
         self.motion_ns_vector.update(event.root)
         rate = int(self.slew_rate.membervalue)
         if self.motion_n.membervalue == "On":
@@ -424,6 +268,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.motion_ns_vector.send_setVector(state="Ok")
 
     async def handle_motion_we(self, event):
+        """Handles manual West/East slew commands."""
         self.motion_we_vector.update(event.root)
         rate = int(self.slew_rate.membervalue)
         if self.motion_w.membervalue == "On":
@@ -435,6 +280,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.motion_we_vector.send_setVector(state="Ok")
 
     async def slew_by_rate(self, axis, rate, direction):
+        """Sends a rate-based slew command to a motor axis."""
         cmd_type = AUXCommands.MC_MOVE_POS if direction == 1 else AUXCommands.MC_MOVE_NEG
         cmd = AUXCommand(cmd_type, AUXTargets.APP, axis, bytes([rate]))
         resp = await self.communicator.send_command(cmd)
@@ -443,6 +289,7 @@ class CelestronAUXDriver(IPyDriver):
             await self.mount_status_vector.send_setVector()
 
     async def handle_goto(self, event):
+        """Handles GoTo command using raw encoder steps."""
         self.absolute_coord_vector.update(event.root)
         await self.absolute_coord_vector.send_setVector(state="Busy")
         
@@ -453,6 +300,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.absolute_coord_vector.send_setVector(state=state)
 
     async def slew_to(self, axis, steps, fast=True):
+        """Sends a position-based GoTo command to a motor axis."""
         cmd_type = AUXCommands.MC_GOTO_FAST if fast else AUXCommands.MC_GOTO_SLOW
         cmd = AUXCommand(cmd_type, AUXTargets.APP, axis, pack_int3_steps(steps))
         resp = await self.communicator.send_command(cmd)
@@ -463,6 +311,7 @@ class CelestronAUXDriver(IPyDriver):
         return False
 
     async def handle_sync(self, event):
+        """Sets the current hardware position to match driver's internal state."""
         if event and event.root:
             self.sync_vector.update(event.root)
         if self.sync_switch.membervalue == "On":
@@ -476,6 +325,7 @@ class CelestronAUXDriver(IPyDriver):
             await self.sync_vector.send_setVector(state=state)
 
     async def handle_park(self, event):
+        """Moves the mount to the park position (0,0 steps)."""
         if event and event.root:
             self.park_vector.update(event.root)
         if self.park_switch.membervalue == "On":
@@ -490,6 +340,7 @@ class CelestronAUXDriver(IPyDriver):
             await self.park_vector.send_setVector()
 
     async def handle_unpark(self, event):
+        """Clears the parked status."""
         if event and event.root:
             self.unpark_vector.update(event.root)
         if self.unpark_switch.membervalue == "On":
@@ -499,6 +350,7 @@ class CelestronAUXDriver(IPyDriver):
             await self.unpark_vector.send_setVector(state="Ok")
 
     async def handle_equatorial_goto(self, event):
+        """Handles GoTo command using RA/Dec coordinates."""
         if event and event.root:
             self.equatorial_vector.update(event.root)
         await self.equatorial_vector.send_setVector(state="Busy")
@@ -508,8 +360,6 @@ class CelestronAUXDriver(IPyDriver):
         
         azm_steps, alt_steps = await self.equatorial_to_steps(ra_val, dec_val)
         
-        print(f"GoTo RA={ra_val}, Dec={dec_val} -> AzmSteps={azm_steps}, AltSteps={alt_steps}")
-        
         azm_success = await self.slew_to(AUXTargets.AZM, azm_steps)
         alt_success = await self.slew_to(AUXTargets.ALT, alt_steps)
         
@@ -517,17 +367,16 @@ class CelestronAUXDriver(IPyDriver):
         await self.equatorial_vector.send_setVector(state=state)
 
     async def equatorial_to_steps(self, ra_hours, dec_deg):
+        """Converts RA/Dec to motor encoder steps using current observer state."""
         import math
-        # INDI RA (hours) -> radians
         ra_rad = (ra_hours / 24.0) * 2 * math.pi
-        # INDI Dec (degrees) -> radians
         dec_rad = (dec_deg / 360.0) * 2 * math.pi
         
         body = ephem.FixedBody()
         body._ra = ra_rad
         body._dec = dec_rad
         
-        self.update_observer() # Refresh time
+        self.update_observer()
         body.compute(self.observer)
         
         azm_steps = int((float(body.az) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
@@ -535,11 +384,12 @@ class CelestronAUXDriver(IPyDriver):
         return azm_steps, alt_steps
 
     async def steps_to_equatorial(self, azm_steps, alt_steps):
+        """Converts motor encoder steps to RA/Dec using current observer state."""
         import math
         az_rad = (azm_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
         alt_rad = (alt_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
         
-        self.update_observer() # Refresh time
+        self.update_observer()
         ra_rad, dec_rad = self.observer.radec_of(az_rad, alt_rad)
         
         ra_hours = (ra_rad / (2 * math.pi)) * 24
@@ -547,12 +397,12 @@ class CelestronAUXDriver(IPyDriver):
         return ra_hours, dec_deg
 
     async def handle_guide_rate(self, event):
+        """Updates guiding/tracking rates for both axes."""
         if event and event.root:
             self.guide_rate_vector.update(event.root)
         val_azm = int(self.guide_azm.membervalue)
         val_alt = int(self.guide_alt.membervalue)
         
-        # Ustawiamy prędkości (używając MC_SET_POS_GUIDERATE dla uproszczenia testu)
         cmd_azm = AUXCommand(AUXCommands.MC_SET_POS_GUIDERATE, AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(val_azm))
         cmd_alt = AUXCommand(AUXCommands.MC_SET_POS_GUIDERATE, AUXTargets.APP, AUXTargets.ALT, pack_int3_steps(val_alt))
         
@@ -569,10 +419,9 @@ class CelestronAUXDriver(IPyDriver):
         await self.guide_rate_vector.send_setVector(state=state)
 
     async def hardware(self):
+        """Periodically called to sync hardware state with INDI properties."""
         if self.communicator and self.communicator.connected:
             await self.read_mount_position()
-            # Check if slew is done
-            # (Simplification: for now we just read position)
 
 if __name__ == "__main__":
     driver = CelestronAUXDriver()

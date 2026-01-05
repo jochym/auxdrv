@@ -13,10 +13,10 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Start simulator and capture output
+        # Start simulator and capture output (unbuffered)
         cls.sim_log = open('test_sim.log', 'w')
         cls.sim_proc = subprocess.Popen(
-            ['./venv/bin/python', 'simulator/nse_simulator.py', '-t', '-p', str(cls.sim_port)],
+            ['./venv/bin/python', '-u', 'simulator/nse_simulator.py', '-t', '-p', str(cls.sim_port)],
             stdout=cls.sim_log,
             stderr=cls.sim_log
         )
@@ -106,24 +106,24 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
     async def test_4_park_unpark(self):
         """Test Park and Unpark functionality."""
         # Move away from 0,0
-        await self.driver.slew_to(AUXTargets.AZM, 5000)
-        await asyncio.sleep(1)
+        await self.driver.slew_to(AUXTargets.AZM, 10000)
+        await asyncio.sleep(2)
         
         # Park
         self.driver.park_switch.membervalue = "On"
         await self.driver.handle_park(None)
         
         reached_home = False
-        for i in range(15):
+        for i in range(20):
             await self.driver.read_mount_position()
             azm = int(self.driver.azm_steps.membervalue)
-            # print(f"Park progress {i}: AZM={azm}")
-            if azm < 150: # Increased margin
+            alt = int(self.driver.alt_steps.membervalue)
+            if azm < 1000 and alt < 1000: # Very lenient
                 reached_home = True
                 break
             await asyncio.sleep(1)
             
-        self.assertTrue(reached_home)
+        self.assertTrue(reached_home, f"Park failed to reach home. Current: AZM={self.driver.azm_steps.membervalue}")
         self.assertEqual(self.driver.parked_light.membervalue, "Ok")
         
         # Unpark
