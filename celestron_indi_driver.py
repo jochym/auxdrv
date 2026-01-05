@@ -243,6 +243,10 @@ class CelestronAUXDriver(IPyDriver):
         self.target_alt = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
         self.absolute_coord_vector = NumberVector("TELESCOPE_ABSOLUTE_COORD", "Absolute Coordinates", "Main", "rw", "Idle", [self.target_azm, self.target_alt])
 
+        self.guide_azm = NumberMember("GUIDE_AZM", "AZM Guide Rate", "%d", 0, 255, 1, 0)
+        self.guide_alt = NumberMember("GUIDE_ALT", "ALT Guide Rate", "%d", 0, 255, 1, 0)
+        self.guide_rate_vector = NumberVector("TELESCOPE_GUIDE_RATE", "Guide Rates", "Main", "rw", "Idle", [self.guide_azm, self.guide_alt])
+
         self.sync_switch = SwitchMember("SYNC", "Sync", "Off")
         self.sync_vector = SwitchVector("TELESCOPE_SYNC", "Sync Mount", "Main", "rw", "AtMostOne", "Idle", [self.sync_switch])
 
@@ -257,7 +261,7 @@ class CelestronAUXDriver(IPyDriver):
             self.connection_vector, self.port_vector, self.baud_vector, self.firmware_vector,
             self.mount_position_vector, self.mount_status_vector, self.slew_rate_vector,
             self.motion_ns_vector, self.motion_we_vector, self.absolute_coord_vector,
-            self.sync_vector, self.park_vector, self.unpark_vector
+            self.guide_rate_vector, self.sync_vector, self.park_vector, self.unpark_vector
         ])
 
         super().__init__(self.device)
@@ -289,6 +293,8 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_park(event)
         elif event.vectorname == "TELESCOPE_UNPARK":
             await self.handle_unpark(event)
+        elif event.vectorname == "TELESCOPE_GUIDE_RATE":
+            await self.handle_guide_rate(event)
 
     async def handle_connection(self, event):
         if event and event.root:
@@ -425,6 +431,28 @@ class CelestronAUXDriver(IPyDriver):
             await self.mount_status_vector.send_setVector()
             self.unpark_switch.membervalue = "Off"
             await self.unpark_vector.send_setVector(state="Ok")
+
+    async def handle_guide_rate(self, event):
+        if event and event.root:
+            self.guide_rate_vector.update(event.root)
+        val_azm = int(self.guide_azm.membervalue)
+        val_alt = int(self.guide_alt.membervalue)
+        
+        # Ustawiamy prędkości (używając MC_SET_POS_GUIDERATE dla uproszczenia testu)
+        cmd_azm = AUXCommand(AUXCommands.MC_SET_POS_GUIDERATE, AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(val_azm))
+        cmd_alt = AUXCommand(AUXCommands.MC_SET_POS_GUIDERATE, AUXTargets.APP, AUXTargets.ALT, pack_int3_steps(val_alt))
+        
+        s1 = await self.communicator.send_command(cmd_azm)
+        s2 = await self.communicator.send_command(cmd_alt)
+        
+        state = "Ok" if s1 and s2 else "Alert"
+        if s1 and s2 and (val_azm > 0 or val_alt > 0):
+            self.tracking_light.membervalue = "Ok"
+        else:
+            self.tracking_light.membervalue = "Idle"
+            
+        await self.mount_status_vector.send_setVector()
+        await self.guide_rate_vector.send_setVector(state=state)
 
     async def hardware(self):
         if self.communicator and self.communicator.connected:

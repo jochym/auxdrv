@@ -9,7 +9,9 @@ Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 - Mechanizm "Echo Skipping" w protokole AUX, umożliwiający pracę na magistralach jednoprzewodowych.
 - Tryb headless (`-t` / `--text`) w symulatorze teleskopu.
 - Obsługa biblioteki `ephem` w symulatorze.
-- Zweryfikowano działanie pętli sterowania (Slew/Read) z symulatorem przez TCP.
+- Implementacja właściwości `TELESCOPE_GUIDE_RATE` w sterowniku INDI.
+- Zweryfikowano działanie pętli sterowania (Slew/Read/Tracking) za pomocą rozszerzonego testu automatycznego.
+
 
 ### Changed
 - Pełna refaktoryzacja `celestron_indi_driver.py` w celu dostosowania do API `indipydriver 3.0.4`.
