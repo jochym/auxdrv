@@ -1,0 +1,49 @@
+# Celestron AUX Driver - Session State
+
+## Current Session Info
+- **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
+- **Last Updated**: 2026-01-05
+- **Current Phase**: Phase 2 - Simulator Refactoring
+
+## Project Progress
+
+### Completed Tasks ✅
+- **Phase 1**: Repository initialization
+  - Git repository initialized
+  - Documentation created (README.md, CHANGELOG.md, .gitignore)
+  - Initial commit made (v0.1.0)
+  - GEMINI.md updated with current status
+- **Phase 2**: Simulator headless mode & TCP support
+  - Simulator refactored to support --text (headless) mode
+  - AUXCommunicator updated with socket:// support
+  - Echo skipping logic implemented in AUX protocol
+  - Driver aligned with indipydriver 3.0.4 API
+
+### In Progress 🔄
+- **Phase 3**: Astronomical Transformations & RA/Dec implementation
+
+### Pending Tasks 📋
+1. Implement RA/Dec to Alt/Az conversion using ephem
+2. Add INDI properties for Right Ascension and Declination
+3. Implement tracking modes (Sidereal, Solar, Lunar)
+4. Create automated test suite for astronomical movements
+
+## Technical Notes
+
+### Simulator Analysis
+- `nse_simulator.py` uses curses for TUI interface
+- `nse_telescope.py` has `self.tui` dependency for printing
+- Main function `main(stdscr)` needs modification for headless mode
+- Network server code is already well-structured
+
+### Next Actions
+1. Add argparse for `--headless` flag
+2. Replace curses calls with logging
+3. Create HeadlessTUI class for compatibility
+4. Maintain existing TCP server functionality
+
+## Repository State
+- **Branch**: main
+- **Last Commit**: 5f767e7 - Initial commit: Celestron AUX driver v0.1.0
+- **Working Directory**: /home/jochym/Projects/INDI/auxdrv
+- **Git Status**: Clean (committed files ready)

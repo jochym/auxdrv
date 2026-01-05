@@ -530,7 +530,7 @@ class NexStarScope:
     def init_dsp(self,stdscr):
         self.scr=stdscr
         if stdscr :
-            self.cmd_log_w=curses.newwin(self.cmd_log.maxlen+2,60,0,50)
+            self.cmd_log_w=curses.newwin((self.cmd_log.maxlen if self.cmd_log.maxlen is not None else 30)+2,60,0,50)
             self.state_w=curses.newwin(1,80,0,0)
             self.state_w.border()
             self.pos_w=curses.newwin(4,25,1,0)
@@ -540,7 +540,7 @@ class NexStarScope:
             self.rate_w=curses.newwin(4,25,5,0)
             self.guide_w=curses.newwin(4,25,5,25)
             self.other_w=curses.newwin(8,50,9,0)
-            self.msg_w=curses.newwin(self.msg_log.maxlen+2,50,17,0)
+            self.msg_w=curses.newwin((self.msg_log.maxlen if self.msg_log.maxlen is not None else 10)+2,50,17,0)
             stdscr.refresh()
 
     def update_dsp(self):
@@ -747,10 +747,11 @@ class NexStarScope:
                 self.msg_log.append(msg)
         else :
             self.msg_log.append(msg)
-
-
+        if not self.tui:
+            print(f"\nMSG: {msg}")
 
     def handle_msg(self, msg):
+
         '''
         React to message. Get AUX command(s) in the message and react to it. 
         Return a message simulating real AUX scope response.

@@ -4,6 +4,7 @@ import asyncio
 import signal
 import socket
 import sys
+import argparse
 from socket import SOL_SOCKET, SO_BROADCAST, SO_REUSEADDR
 from nse_telescope import NexStarScope, repr_angle
 
@@ -18,14 +19,16 @@ async def broadcast(sport=2000, dport=55555, host='255.255.255.255', seconds_to_
     # Fake msg. The app does not care for the payload
     msg = 110*b'X'
     sck.bind(('',sport))
-    telescope.print_msg('Broadcasting to port {0}'.format(dport))
-    telescope.print_msg('sleeping for: {0} seconds'.format(seconds_to_sleep))
+    if telescope:
+        telescope.print_msg('Broadcasting to port {0}'.format(dport))
+        telescope.print_msg('sleeping for: {0} seconds'.format(seconds_to_sleep))
     while True :
         bn = sck.sendto(msg,(host,dport))
         await asyncio.sleep(seconds_to_sleep)
-    telescope.print_msg('Stopping broadcast')
+    if telescope:
+        telescope.print_msg('Stopping broadcast')
 
-async def timer(seconds_to_sleep=1,telescope=None):
+async def timer(seconds_to_sleep=1.0, telescope=None):
     from time import time
     t=time()
     while True :
@@ -55,10 +58,12 @@ async def handle_port2000(reader, writer):
         data = await reader.read(1024)
         if not data :
             writer.close()
-            telescope.print_msg('Connection closed. Closing server.')
+            if telescope:
+                telescope.print_msg('Connection closed. Closing server.')
             return
         elif not connected :
-            telescope.print_msg('App from {0} connected.'.format(writer.get_extra_info('peername')))
+            if telescope:
+                telescope.print_msg('App from {0} connected.'.format(writer.get_extra_info('peername')))
             connected=True
         retry = 5
         addr = writer.get_extra_info('peername')
@@ -68,11 +73,13 @@ async def handle_port2000(reader, writer):
             if data[:3]==b'$$$' :
                 # Enter command mode
                 transparent = False
-                telescope.print_msg('App from {0} connected.'.format(addr))
+                if telescope:
+                    telescope.print_msg('App from {0} connected.'.format(addr))
                 resp = b'CMD\r\n'
             else :
                 # pass it on to the scope for handling
-                resp = telescope.handle_msg(data)
+                if telescope:
+                    resp = telescope.handle_msg(data)
         else :
             # We are in command mode detect exit and get out.
             # Otherwise just echo what we got and ack.
@@ -92,12 +99,6 @@ async def handle_port2000(reader, writer):
             #print("<- Server sending: %r" % resp )
             writer.write(resp)
             await writer.drain()
-
-#def signal_handler(signal, frame):  
-#    loop.stop()
-#    sys.exit(0)
-
-#signal.signal(signal.SIGINT, signal_handler)
 
 def to_be(n, size):
     b=bytearray(size)
@@ -208,15 +209,16 @@ class StellariumServer(asyncio.Protocol):
     def connection_lost(self, exc):
         try:
             connections.remove(self.transport)
-            self.telescope.print_msg('Stellarium connection closed\n')
+            if self.telescope is not None:
+                self.telescope.print_msg('Stellarium connection closed\n')
         except ValueError:
             pass
 
     def data_received(self,data):
         if self.telescope is not None:
-            handle_stellarium_cmd(telescope,data)
+            handle_stellarium_cmd(self.telescope,data)
     
-def main(stdscr):
+def main(stdscr, args):
     import ephem
     
     global telescope 
@@ -224,23 +226,23 @@ def main(stdscr):
     obs = ephem.Observer()
     obs.lon, obs.lat = '20:02', '50:05'
 
-    if len(sys.argv) >1 and sys.argv[1]=='t':
-        telescope = NexStarScope(stdscr=None)
+    if args.text:
+        telescope = NexStarScope(stdscr=None, tui=False)
     else :
-        telescope = NexStarScope(stdscr=stdscr)
+        telescope = NexStarScope(stdscr=stdscr, tui=True)
 
     loop = asyncio.get_event_loop()
     
     scope = loop.run_until_complete(
-                asyncio.start_server(handle_port2000, host='', port=2000))
+                asyncio.start_server(handle_port2000, host='', port=args.port))
     
     stell = loop.run_until_complete(
-                loop.create_server(StellariumServer,host='',port=10001))
+                loop.create_server(StellariumServer,host='',port=args.stellarium))
     
-    telescope.print_msg('NSE simulator strted on {}.'.format(scope.sockets[0].getsockname()))
+    telescope.print_msg('NSE simulator started on {}.'.format(scope.sockets[0].getsockname()))
     telescope.print_msg('Hit CTRL-C to stop.')
     
-    asyncio.ensure_future(broadcast())
+    asyncio.ensure_future(broadcast(sport=args.port))
     asyncio.ensure_future(timer(0.1,telescope))
     asyncio.ensure_future(report_scope_pos(0.1,telescope,obs))
 
@@ -254,7 +256,19 @@ def main(stdscr):
     stell.close()
     loop.run_until_complete(stell.wait_closed())
 
-    #loop.run_until_complete(asyncio.wait([broadcast(), timer(0.2), scope]))
     loop.close()
 
-curses.wrapper(main)
+def start_simulator():
+    parser = argparse.ArgumentParser(description='NexStar AUX Simulator')
+    parser.add_argument('-t', '--text', action='store_true', help='Use text mode (headless)')
+    parser.add_argument('-p', '--port', type=int, default=2000, help='AUX port (default 2000)')
+    parser.add_argument('-s', '--stellarium', type=int, default=10001, help='Stellarium port (default 10001)')
+    args = parser.parse_args()
+
+    if args.text:
+        main(None, args)
+    else:
+        curses.wrapper(main, args)
+
+if __name__ == "__main__":
+    start_simulator()

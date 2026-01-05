@@ -11,25 +11,28 @@ Nowoczesny sterownik INDI dla montaży Celestron wykorzystujący protokół AUX,
 ## Wymagania
 
 *   Python 3.8+
-*   `indipydriver`
+*   `indipydriver >= 3.0.0`
 *   `pyserial-asyncio`
+*   `ephem`
 
 Instalacja zależności:
 ```bash
-pip install indipydriver pyserial-asyncio
+pip install indipydriver pyserial-asyncio ephem
 ```
 
 ## Uruchomienie
 
-1.  Uruchomienie symulatora (opcjonalnie):
+1.  Uruchomienie symulatora (tryb headless):
     ```bash
-    python simulator/nse_simulator.py
+    python simulator/nse_simulator.py -t
     ```
 2.  Uruchomienie sterownika INDI:
     ```bash
     python celestron_indi_driver.py
     ```
 
+Dla połączenia z symulatorem użyj portu: `socket://localhost:2000`.
+
 ## Rozwój
 
-Projekt jest w trakcie aktywnego rozwoju. Planowane jest dodanie obsługi TCP dla symulatora, trybu headless oraz pełnych transformacji współrzędnych astronomicznych.
+Projekt jest w trakcie aktywnego rozwoju. Planowane jest dodanie pełnych transformacji współrzędnych astronomicznych (Faza 3).

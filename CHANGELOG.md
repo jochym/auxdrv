@@ -2,6 +2,19 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.2.0] - 2026-01-05
+
+### Added
+- Wsparcie dla połączeń TCP w `AUXCommunicator` (URL `socket://host:port`).
+- Mechanizm "Echo Skipping" w protokole AUX, umożliwiający pracę na magistralach jednoprzewodowych.
+- Tryb headless (`-t` / `--text`) w symulatorze teleskopu.
+- Obsługa biblioteki `ephem` w symulatorze.
+
+### Changed
+- Pełna refaktoryzacja `celestron_indi_driver.py` w celu dostosowania do API `indipydriver 3.0.4`.
+- Poprawa stabilności odczytu ramek AUX (użycie `readexactly`).
+- Usunięcie błędnych bajtów zerowych z plików źródłowych.
+
 ## [0.1.0] - 2026-01-05
 
 ### Added

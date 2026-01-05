@@ -56,29 +56,34 @@ Poniżej przedstawiono listę zadań i kierunków dalszego rozwoju sterownika:
     *   Implementacja odczytu statusu montażu (np. czy montaż jest w ruchu, czy osiągnął cel) za pomocą komend AUX `MC_SLEW_DONE`, `MC_SEEK_DONE`.
     *   Wykorzystanie właściwości `ILight` do wizualizacji statusów.
 
-### 6. Integracja z symulatorem (W TRAKCIE)
+### 6. Integracja z symulatorem (ZAKOŃCZONO)
 *   **Cel:** Umożliwienie automatycznego testowania sterownika bez fizycznego montażu.
-*   **Zadania w realizacji:**
+*   **Zrealizowane zadania:**
     *   ✅ Inicjalizacja repozytorium Git, dokumentacja (README, CHANGELOG).
-    *   🔄 Refaktoryzacja symulatora do trybu headless (bez curses).
-    *   🔄 Wdrożenie wsparcia dla komunikacji TCP/IP między driverem a symulatorem.
-    *   📋 Automatyzacja testów i weryfikacji funkcjonalności.
+    *   ✅ Refaktoryzacja symulatora do trybu headless (bez curses).
+    *   ✅ Wdrożenie wsparcia dla komunikacji TCP/IP między driverem a symulatorem (prefix `socket://`).
+    *   ✅ Mechanizm pomijania echa (Echo Skipping) dla poprawnej pracy w sieci.
+    *   ✅ Aktualizacja kodu do API `indipydriver 3.0.4`.
 
-## Instrukcje uruchamiania sterownika
+## Instrukcje uruchamiania sterownika (v0.2.0)
 
 ### Wymagane zależności:
-*   `indipydriver`
+*   `indipydriver >= 3.0.0`
 *   `pyserial-asyncio`
+*   `ephem`
 
 Zainstaluj je za pomocą:
 ```bash
-pip install indipydriver pyserial-asyncio
+pip install indipydriver pyserial-asyncio ephem
 ```
 
-### Uruchomienie:
-1.  Zapisz kod sterownika (plik `celestron_indi_driver.py`) w wybranym katalogu.
-2.  Uruchom sterownik z terminala:
+### Uruchomienie z symulatorem:
+1.  Uruchom symulator w tle (tryb headless):
     ```bash
-    python /sciezka/do/celestron_indi_driver.py
+    python simulator/nse_simulator.py -t &
     ```
-3.  Połącz się z klientem INDI (np. KStars/Ekos), dodając nowego sterownika "Celestron AUX". Upewnij się, że ustawienia portu szeregowego w kliencie INDI odpowiadają tym skonfigurowanym w sterowniku (domyślnie `/dev/ttyUSB0` i 19200 baud).
+2.  Uruchom sterownik:
+    ```bash
+    python celestron_indi_driver.py
+    ```
+3.  W kliencie INDI (np. Ekos) ustaw Port na: `socket://localhost:2000`.
