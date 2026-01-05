@@ -11,6 +11,8 @@ Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 - Implementacja logiki GoTo na współrzędne równikowe (RA/Dec -> Alt/Az -> Encoders).
 - Automatyczne wyliczanie i raportowanie bieżącego RA/Dec na podstawie pozycji enkodera.
 - Nowy test funkcjonalny `test_6_equatorial_goto` weryfikujący poprawność transformacji.
+- Obsługa pliku konfiguracyjnego `config.json` z domyślną lokalizacją w Bęble.
+- Instrukcja integracji ze Stellarium do weryfikacji wizualnej.
 
 ### Changed
 - Poprawiono odporność metody `handle_equatorial_goto` na brak danych zdarzenia.

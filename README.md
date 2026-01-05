@@ -33,6 +33,18 @@ pip install indipydriver pyserial-asyncio ephem
 
 Dla połączenia z symulatorem użyj portu: `socket://localhost:2000`.
 
-## Rozwój
+## Integracja ze Stellarium
 
-Projekt jest w trakcie aktywnego rozwoju. Planowane jest dodanie pełnych transformacji współrzędnych astronomicznych (Faza 3).
+Symulator udostępnia serwer zgodny z protokołem Stellarium na porcie `10001`. Aby zweryfikować działanie:
+
+1.  Uruchom symulator: `python simulator/nse_simulator.py -t`
+2.  W Stellarium przejdź do: **Konfiguracja (F2) -> Wtyczki -> Sterowanie teleskopem -> Skonfiguruj**.
+3.  Dodaj nowy teleskop:
+    *   Sterowany przez: **Zewnętrzne oprogramowanie lub inny komputer**.
+    *   Nazwa: **NSE Simulator**.
+    *   Host: **localhost**, Port: **10001**.
+4.  Połącz się z teleskopem. Zobaczysz celownik teleskopu na mapie nieba.
+
+## Konfiguracja
+
+Lokalizacja obserwatora oraz porty są definiowane w pliku `config.json`. Domyślnie ustawiono współrzędne dla miejscowości **Bębło, Polska**.

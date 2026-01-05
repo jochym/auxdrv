@@ -5,6 +5,30 @@ import indipydriver
 from indipydriver import IPyDriver, Device, SwitchVector, SwitchMember, TextVector, TextMember, NumberVector, NumberMember, LightVector, LightMember
 import ephem
 from datetime import datetime
+import json
+import os
+
+# Load configuration
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+DEFAULT_CONFIG = {
+    "observer": {
+        "latitude": 50.1822,
+        "longitude": 19.7925,
+        "elevation": 400
+    }
+}
+
+def load_config():
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading config: {e}")
+    return DEFAULT_CONFIG
+
+config = load_config()
+obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
 
 # Enums from auxproto.h
 class AUXCommands(Enum):
@@ -259,9 +283,9 @@ class CelestronAUXDriver(IPyDriver):
         self.unpark_vector = SwitchVector("TELESCOPE_UNPARK", "Unpark Mount", "Main", "rw", "AtMostOne", "Idle", [self.unpark_switch])
 
         # Geographical location (standard INDI property)
-        self.lat = NumberMember("LAT", "Latitude (deg)", " %06.2f", -90, 90, 0, 50.05)
-        self.long = NumberMember("LONG", "Longitude (deg)", " %06.2f", -360, 360, 0, 20.02)
-        self.elev = NumberMember("ELEV", "Elevation (m)", " %04.0f", -1000, 10000, 0, 200)
+        self.lat = NumberMember("LAT", "Latitude (deg)", " %06.2f", -90, 90, 0, obs_cfg.get("latitude", 50.1822))
+        self.long = NumberMember("LONG", "Longitude (deg)", " %06.2f", -360, 360, 0, obs_cfg.get("longitude", 19.7925))
+        self.elev = NumberMember("ELEV", "Elevation (m)", " %04.0f", -1000, 10000, 0, obs_cfg.get("elevation", 400))
         self.location_vector = NumberVector("GEOGRAPHIC_COORD", "Location", "Site", "rw", "Idle", [self.lat, self.long, self.elev])
 
         # Equatorial coordinates (standard INDI property)

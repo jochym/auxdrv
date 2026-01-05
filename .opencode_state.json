@@ -27,6 +27,7 @@
   - Added GEOGRAPHIC_COORD and EQUATORIAL_EOD_COORD properties
   - Implemented RA/Dec to Encoders GoTo logic
   - Implemented automatic RA/Dec reporting from Encoders
+  - Added central configuration support in `config.json` (Default: Bębło)
 
 ### In Progress 🔄
 - **Phase 3**: Verification and Polishing

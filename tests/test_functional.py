@@ -148,9 +148,14 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
     async def test_6_equatorial_goto(self):
         """Test GoTo movement using RA/Dec coordinates."""
-        # Set location (Kraków)
-        self.driver.lat.membervalue = 50.06
-        self.driver.long.membervalue = 19.94
+        # Location is loaded from config.json by default in the driver,
+        # but we can set it explicitly to be sure.
+        import json
+        with open('config.json', 'r') as f:
+            cfg = json.load(f).get('observer', {})
+        
+        self.driver.lat.membervalue = cfg.get('latitude', 50.1822)
+        self.driver.long.membervalue = cfg.get('longitude', 19.7925)
         self.driver.update_observer()
         
         # Target RA/Dec (Polaris approx)

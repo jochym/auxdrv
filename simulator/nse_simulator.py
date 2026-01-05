@@ -5,10 +5,34 @@ import signal
 import socket
 import sys
 import argparse
+import json
+import os
 from socket import SOL_SOCKET, SO_BROADCAST, SO_REUSEADDR
 from nse_telescope import NexStarScope, repr_angle
 
 import curses
+
+# Load configuration
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.json')
+DEFAULT_CONFIG = {
+    "observer": {
+        "latitude": 50.1822,
+        "longitude": 19.7925,
+        "elevation": 400
+    }
+}
+
+def load_config():
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading config: {e}")
+    return DEFAULT_CONFIG
+
+config = load_config()
+obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
 
 telescope=None
 
@@ -193,9 +217,12 @@ class StellariumServer(asyncio.Protocol):
     def __init__(self, *arg, **kwarg):
         import ephem
         global telescope
+        global obs_cfg
         
         self.obs = ephem.Observer()
-        self.obs.lon, self.obs.lat = '20:02', '50:05'
+        self.obs.lat = str(obs_cfg.get("latitude", 50.1822))
+        self.obs.lon = str(obs_cfg.get("longitude", 19.7925))
+        self.obs.elevation = float(obs_cfg.get("elevation", 400))
         self.telescope=telescope
         asyncio.Protocol.__init__(self,*arg,**kwarg)
 
@@ -220,11 +247,13 @@ class StellariumServer(asyncio.Protocol):
     
 def main(stdscr, args):
     import ephem
-    
+    global obs_cfg
     global telescope 
 
     obs = ephem.Observer()
-    obs.lon, obs.lat = '20:02', '50:05'
+    obs.lat = str(obs_cfg.get("latitude", 50.1822))
+    obs.lon = str(obs_cfg.get("longitude", 19.7925))
+    obs.elevation = float(obs_cfg.get("elevation", 400))
 
     if args.text:
         telescope = NexStarScope(stdscr=None, tui=False)
@@ -259,10 +288,12 @@ def main(stdscr, args):
     loop.close()
 
 def start_simulator():
+    global config
+    sim_cfg = config.get("simulator", {})
     parser = argparse.ArgumentParser(description='NexStar AUX Simulator')
     parser.add_argument('-t', '--text', action='store_true', help='Use text mode (headless)')
-    parser.add_argument('-p', '--port', type=int, default=2000, help='AUX port (default 2000)')
-    parser.add_argument('-s', '--stellarium', type=int, default=10001, help='Stellarium port (default 10001)')
+    parser.add_argument('-p', '--port', type=int, default=sim_cfg.get("aux_port", 2000), help='AUX port')
+    parser.add_argument('-s', '--stellarium', type=int, default=sim_cfg.get("stellarium_port", 10001), help='Stellarium port')
     args = parser.parse_args()
 
     if args.text:
