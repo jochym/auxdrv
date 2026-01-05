@@ -2,6 +2,21 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.4.0] - 2026-01-05
+
+### Added
+- Implementacja logiki podejścia **Anti-backlash GoTo** (Faza 4).
+- Nowe właściwości INDI: `GOTO_APPROACH_MODE` (DISABLED, FIXED_OFFSET, TRACKING_DIRECTION) oraz `GOTO_APPROACH_OFFSET`.
+- Zaawansowana pętla śledzenia oparta na **predykcji 2. rzędu** (Faza 5).
+- Algorytm wyznaczania prędkości kątowych ($\omega$) za pomocą symetrycznego wyrażenia różniczkowego.
+- Nowe właściwości INDI: `TELESCOPE_TRACK_MODE` (Sidereal, Solar, Lunar).
+- Mechanizm blokowania komunikacji (`asyncio.Lock`) w `AUXCommunicator` dla zapewnienia bezpieczeństwa współbieżnego dostępu do magistrali AUX.
+- Nowe testy funkcjonalne: `test_7_approach_logic`, `test_8_approach_tracking_direction`, `test_9_predictive_tracking`.
+
+### Changed
+- Refaktoryzacja metody GoTo w celu obsługi wieloetapowego ruchu (Stage 1: Fast Approach, Stage 2: Slow Final).
+- Metoda `equatorial_to_steps` obsługuje teraz parametr `time_offset`.
+
 ## [0.3.0] - 2026-01-05
 
 ### Added

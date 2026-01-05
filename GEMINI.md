@@ -21,19 +21,23 @@ Projekt zrealizował fundamenty techniczne i matematyczne potrzebne do sterowani
 *   Uzupełnienie wszystkich funkcji i klas o docstringi zgodne ze standardem Google Style.
 *   Opisanie logiki komunikacji i transformacji współrzędnych dla ułatwienia przyszłego rozwoju.
 
-### Faza 4: Logika Podejścia (Anti-backlash GoTo)
+### Faza 4: Logika Podejścia (Anti-backlash GoTo) (ZAKOŃCZONO)
 *   **Cel:** Eliminacja luzów mechanicznych.
-*   **Tryb FIXED_OFFSET:** Zawsze kończ ruch w zadanym kierunku (np. dodatnie kroki w obu osiach).
-*   **Tryb TRACKING_DIRECTION:** Ostatnia faza ruchu (wolna) w kierunku wektora śledzenia obiektu.
-*   **Właściwości INDI:** `GOTO_APPROACH_MODE`, `GOTO_APPROACH_OFFSET`.
+*   **Zrealizowane zadania:**
+    *   ✅ Właściwości INDI: `GOTO_APPROACH_MODE`, `GOTO_APPROACH_OFFSET`.
+    *   ✅ Implementacja trybu **FIXED_OFFSET** (zawsze podejście z tej samej strony).
+    *   ✅ Implementacja trybu **TRACKING_DIRECTION** (dynamiczne wyznaczanie kierunku zgodnego ze śledzeniem).
+    *   ✅ Dwuetapowy ruch: Szybki dojazd do punktu pośredniego + wolny dojazd precyzyjny.
 
-### Faza 5: Zaawansowane Śledzenie Predykcyjne (2nd Order)
-*   **Algorytm:** Wyznaczanie prędkości kątowych ($\omega$) za pomocą symetrycznego wyrażenia różniczkowego drugiego rzędu:
-    $\omega(t) \approx \frac{\theta(t + \Delta t) - \theta(t - \Delta t)}{2\Delta t}$
-*   **Pętla śledzenia:** Częstotliwość 1 Hz, aktualizacja prędkości w czasie rzeczywistym.
-*   **Rozszerzalność:** Architektura przygotowana pod śledzenie obiektów nie-syderycznych (satelity, komety, asteroidy).
+### Faza 5: Zaawansowane Śledzenie Predykcyjne (2nd Order) (ZAKOŃCZONO)
+*   **Cel:** Płynne prowadzenie za obiektem z użyciem predykcji numerycznej.
+*   **Zrealizowane zadania:**
+    *   ✅ Algorytm: Wyznaczanie prędkości kątowych ($\omega$) za pomocą symetrycznego wyrażenia różniczkowego drugiego rzędu.
+    *   ✅ Pętla śledzenia: Tło asynchroniczne (1 Hz), aktualizacja prędkości silników (`MC_SET_POS_GUIDERATE`).
+    *   ✅ Rozszerzalność: Architektura gotowa pod śledzenie obiektów nie-syderycznych (satelity, komety).
+    *   ✅ Właściwość INDI: `TELESCOPE_TRACK_MODE`.
 
-### Faza 6: Obsługa akcesoriów i stabilność
+### Faza 6: Obsługa akcesoriów i stabilność (NASTĘPNY KROK)
 *   Implementacja wsparcia dla modułów Focuser (wyciąg okularowy) i GPS.
 *   Długofalowe testy dryfu śledzenia i odporności na błędy komunikacji.
 

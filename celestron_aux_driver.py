@@ -242,6 +242,7 @@ class AUXCommunicator:
         self.reader = None
         self.writer = None
         self.connected = False
+        self.lock = asyncio.Lock()
 
     async def connect(self) -> bool:
         """
@@ -290,33 +291,32 @@ class AUXCommunicator:
         if not self.connected or not self.writer:
             return None
 
-        tx_buf = command.fill_buf()
-        try:
-            self.writer.write(tx_buf)
-            await self.writer.drain()
+        async with self.lock:
+            tx_buf = command.fill_buf()
+            try:
+                self.writer.write(tx_buf)
+                await self.writer.drain()
 
-            while True:
-                # 1. Wait for Start Byte
-                start_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
-                if start_byte[0] != AUXCommand.START_BYTE:
-                    continue
+                while True:
+                    # 1. Wait for Start Byte
+                    start_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
+                    if start_byte[0] != AUXCommand.START_BYTE:
+                        continue
 
-                # 2. Read Length
-                length_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
-                response_length = length_byte[0]
-                
-                # 3. Read payload + Checksum
-                remaining_bytes = await asyncio.wait_for(self.reader.readexactly(response_length + 1), timeout=self.timeout)
+                    # 2. Read Length
+                    length_byte = await asyncio.wait_for(self.reader.readexactly(1), timeout=self.timeout)
+                    response_length = length_byte[0]
+                    
+                    # 3. Read payload + Checksum
+                    remaining_bytes = await asyncio.wait_for(self.reader.readexactly(response_length + 1), timeout=self.timeout)
 
-                rx_buf = start_byte + length_byte + remaining_bytes
-                resp = AUXCommand.parse_buf(rx_buf)
-                
-                # 4. Skip Echo
-                if resp.source == command.source and resp.destination == command.destination and resp.command == command.command:
-                    continue
-                return resp
-        except Exception as e:
-            print(f"Communicator: Error in send_command: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+                    rx_buf = start_byte + length_byte + remaining_bytes
+                    resp = AUXCommand.parse_buf(rx_buf)
+                    
+                    # 4. Skip Echo
+                    if resp.source == command.source and resp.destination == command.destination and resp.command == command.command:
+                        continue
+                    return resp
+            except Exception as e:
+                print(f"Communicator: Error in send_command: {type(e).__name__}: {e}")
+                return None

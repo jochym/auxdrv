@@ -184,5 +184,111 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             
         self.assertTrue(reached, f"RA/Dec target not reached. Final: RA={self.driver.ra.membervalue}, DEC={self.driver.dec.membervalue}")
 
+    async def test_7_approach_logic(self):
+        """Test anti-backlash approach logic (two-stage movement)."""
+        # Enable FIXED_OFFSET approach
+        self.driver.approach_disabled.membervalue = "Off"
+        self.driver.approach_fixed.membervalue = "On"
+        self.driver.approach_azm_offset.membervalue = 5000
+        self.driver.approach_alt_offset.membervalue = 5000
+        
+        target_azm = 20000
+        target_alt = 10000
+        
+        # Track calls to _do_slew
+        slew_calls = []
+        original_do_slew = self.driver._do_slew
+        async def mock_do_slew(axis, steps, fast=True):
+            slew_calls.append((axis, steps, fast))
+            return await original_do_slew(axis, steps, fast)
+        
+        self.driver._do_slew = mock_do_slew
+        
+        await self.driver.goto_position(target_azm, target_alt)
+        
+        # Should have 4 calls (2 axes * 2 stages)
+        self.assertEqual(len(slew_calls), 4)
+        
+        # Stage 1: Fast to intermediate
+        self.assertEqual(slew_calls[0][1], target_azm - 5000)
+        self.assertTrue(slew_calls[0][2])
+        
+        # Stage 2: Slow to final
+        self.assertEqual(slew_calls[2][1], target_azm)
+        self.assertFalse(slew_calls[2][2])
+
+    async def test_8_approach_tracking_direction(self):
+        """Test anti-backlash approach in tracking direction."""
+        # Set location
+        self.driver.lat.membervalue = 50.06
+        self.driver.long.membervalue = 19.94
+        self.driver.update_observer()
+        
+        ra, dec = 2.5, 80.0 # Use 80 deg Dec to ensure more measurable tracking rates
+        
+        # Enable TRACKING_DIRECTION approach
+        self.driver.approach_disabled.membervalue = "Off"
+        self.driver.approach_tracking.membervalue = "On"
+        self.driver.approach_azm_offset.membervalue = 5000
+        self.driver.approach_alt_offset.membervalue = 5000
+        
+        slew_calls = []
+        original_do_slew = self.driver._do_slew
+        async def mock_do_slew(axis, steps, fast=True):
+            slew_calls.append((axis, steps, fast))
+            return await original_do_slew(axis, steps, fast)
+        self.driver._do_slew = mock_do_slew
+        
+        target_azm, target_alt = await self.driver.equatorial_to_steps(ra, dec)
+        await self.driver.goto_position(target_azm, target_alt, ra=ra, dec=dec)
+        
+        self.assertEqual(len(slew_calls), 4)
+        
+        # Verify direction matches tracking rate
+        rate_azm, rate_alt = await self.driver.get_tracking_rates(ra, dec)
+        azm_sign = 1 if rate_azm >= 0 else -1
+        alt_sign = 1 if rate_alt >= 0 else -1
+        
+        expected_inter_azm = (target_azm - azm_sign * 5000) % 16777216
+        expected_inter_alt = (target_alt - alt_sign * 5000) % 16777216
+        
+        self.assertEqual(slew_calls[0][1], expected_inter_azm)
+        self.assertEqual(slew_calls[1][1], expected_inter_alt)
+
+    async def test_9_predictive_tracking(self):
+        """Test 2nd order predictive tracking loop."""
+        # Target some object
+        self.driver.ra.membervalue = 12.0
+        self.driver.dec.membervalue = 45.0
+        
+        # Enable tracking
+        self.driver.track_none.membervalue = "Off"
+        self.driver.track_sidereal.membervalue = "On"
+        
+        await self.driver.handle_track_mode(None)
+        self.assertIsNotNone(self.driver._tracking_task)
+        
+        # Track guide rate commands
+        recorded_cmds = []
+        original_send = self.driver.communicator.send_command
+        async def mock_send(cmd):
+            from celestron_aux_driver import AUXCommands
+            if cmd.command in (AUXCommands.MC_SET_POS_GUIDERATE, AUXCommands.MC_SET_NEG_GUIDERATE):
+                recorded_cmds.append(cmd)
+            return await original_send(cmd)
+        
+        self.driver.communicator.send_command = mock_send
+        
+        # Wait for loop to run
+        await asyncio.sleep(2.5)
+        
+        # Check if commands were sent
+        self.assertGreaterEqual(len(recorded_cmds), 2)
+        
+        # Stop tracking
+        self.driver.track_none.membervalue = "On"
+        await self.driver.handle_track_mode(None)
+        self.assertIsNone(self.driver._tracking_task)
+
 if __name__ == "__main__":
     unittest.main()

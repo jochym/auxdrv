@@ -67,13 +67,16 @@ class CelestronAUXDriver(IPyDriver):
             self.mount_position_vector, self.mount_status_vector, self.slew_rate_vector,
             self.motion_ns_vector, self.motion_we_vector, self.absolute_coord_vector,
             self.guide_rate_vector, self.sync_vector, self.park_vector, self.unpark_vector,
-            self.location_vector, self.equatorial_vector
+            self.location_vector, self.equatorial_vector,
+            self.approach_mode_vector, self.approach_offset_vector,
+            self.track_mode_vector
         ])
 
         super().__init__(self.device)
         self.communicator = None
         self.current_azm_steps = 0
         self.current_alt_steps = 0
+        self._tracking_task = None
         
         # 3. ephem Observer for RA/Dec <-> Alt/Az transformations
         self.observer = ephem.Observer()
@@ -152,12 +155,36 @@ class CelestronAUXDriver(IPyDriver):
         self.dec = NumberMember("DEC", "Declination (deg)", "%08.3f", -90, 90, 0, 0)
         self.equatorial_vector = NumberVector("EQUATORIAL_EOD_COORD", "Equatorial JNow", "Main", "rw", "Idle", [self.ra, self.dec])
 
-    def update_observer(self):
+        # GoTo Approach settings
+        self.approach_disabled = SwitchMember("DISABLED", "Disabled", "On")
+        self.approach_fixed = SwitchMember("FIXED_OFFSET", "Fixed Offset", "Off")
+        self.approach_tracking = SwitchMember("TRACKING_DIRECTION", "Tracking Direction", "Off")
+        self.approach_mode_vector = SwitchVector("GOTO_APPROACH_MODE", "Approach Mode", "Options", "rw", "OneOfMany", "Idle", 
+                                               [self.approach_disabled, self.approach_fixed, self.approach_tracking])
+
+        self.approach_azm_offset = NumberMember("AZM_OFFSET", "AZM Offset (steps)", "%d", 0, 1000000, 1, 10000)
+        self.approach_alt_offset = NumberMember("ALT_OFFSET", "ALT Offset (steps)", "%d", 0, 1000000, 1, 10000)
+        self.approach_offset_vector = NumberVector("GOTO_APPROACH_OFFSET", "Approach Offset", "Options", "rw", "Idle", 
+                                                 [self.approach_azm_offset, self.approach_alt_offset])
+
+        # Tracking Modes
+        self.track_none = SwitchMember("TRACK_OFF", "Off", "On")
+        self.track_sidereal = SwitchMember("TRACK_SIDEREAL", "Sidereal", "Off")
+        self.track_solar = SwitchMember("TRACK_SOLAR", "Solar", "Off")
+        self.track_lunar = SwitchMember("TRACK_LUNAR", "Lunar", "Off")
+        self.track_mode_vector = SwitchVector("TELESCOPE_TRACK_MODE", "Tracking Mode", "Main", "rw", "OneOfMany", "Idle",
+                                            [self.track_none, self.track_sidereal, self.track_solar, self.track_lunar])
+
+    def update_observer(self, time_offset: float = 0):
         """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
-        self.observer.date = datetime.now(timezone.utc).replace(tzinfo=None)
+        if time_offset == 0:
+            self.observer.date = datetime.now(timezone.utc).replace(tzinfo=None)
+        else:
+            from datetime import timedelta
+            self.observer.date = (datetime.now(timezone.utc) + timedelta(seconds=time_offset)).replace(tzinfo=None)
 
     async def rxevent(self, event):
         """Main event handler for INDI property updates."""
@@ -192,6 +219,14 @@ class CelestronAUXDriver(IPyDriver):
             await self.location_vector.send_setVector(state="Ok")
         elif event.vectorname == "EQUATORIAL_EOD_COORD":
             await self.handle_equatorial_goto(event)
+        elif event.vectorname == "GOTO_APPROACH_MODE":
+            self.approach_mode_vector.update(event.root)
+            await self.approach_mode_vector.send_setVector(state="Ok")
+        elif event.vectorname == "GOTO_APPROACH_OFFSET":
+            self.approach_offset_vector.update(event.root)
+            await self.approach_offset_vector.send_setVector(state="Ok")
+        elif event.vectorname == "TELESCOPE_TRACK_MODE":
+            await self.handle_track_mode(event)
 
     async def handle_connection(self, event):
         """Handles CONNECT/DISCONNECT switches."""
@@ -288,19 +323,19 @@ class CelestronAUXDriver(IPyDriver):
             self.slewing_light.membervalue = "Ok" if rate > 0 else "Idle"
             await self.mount_status_vector.send_setVector()
 
-    async def handle_goto(self, event):
-        """Handles GoTo command using raw encoder steps."""
-        self.absolute_coord_vector.update(event.root)
-        await self.absolute_coord_vector.send_setVector(state="Busy")
-        
-        azm_success = await self.slew_to(AUXTargets.AZM, int(self.target_azm.membervalue))
-        alt_success = await self.slew_to(AUXTargets.ALT, int(self.target_alt.membervalue))
-        
-        state = "Ok" if azm_success and alt_success else "Alert"
-        await self.absolute_coord_vector.send_setVector(state=state)
+    async def _wait_for_slew(self, axis):
+        """Waits until the specified axis finishes slewing."""
+        for _ in range(60): # 60 seconds timeout
+            cmd = AUXCommand(AUXCommands.MC_SLEW_DONE, AUXTargets.APP, axis)
+            resp = await self.communicator.send_command(cmd)
+            # Response 0xFF means done
+            if resp and len(resp.data) >= 1 and resp.data[0] == 0xFF:
+                return True
+            await asyncio.sleep(1)
+        return False
 
-    async def slew_to(self, axis, steps, fast=True):
-        """Sends a position-based GoTo command to a motor axis."""
+    async def _do_slew(self, axis, steps, fast=True):
+        """Sends a position-based GoTo command to a motor axis (low-level)."""
         cmd_type = AUXCommands.MC_GOTO_FAST if fast else AUXCommands.MC_GOTO_SLOW
         cmd = AUXCommand(cmd_type, AUXTargets.APP, axis, pack_int3_steps(steps))
         resp = await self.communicator.send_command(cmd)
@@ -309,6 +344,86 @@ class CelestronAUXDriver(IPyDriver):
             await self.mount_status_vector.send_setVector()
             return True
         return False
+
+    async def get_tracking_rates(self, ra, dec):
+        """Calculates current tracking rates in steps/second."""
+        s1_azm, s1_alt = await self.equatorial_to_steps(ra, dec, time_offset=0)
+        s2_azm, s2_alt = await self.equatorial_to_steps(ra, dec, time_offset=60)
+        
+        def diff_steps(s2, s1):
+            d = s2 - s1
+            if d > STEPS_PER_REVOLUTION/2: d -= STEPS_PER_REVOLUTION
+            if d < -STEPS_PER_REVOLUTION/2: d += STEPS_PER_REVOLUTION
+            return d
+            
+        return diff_steps(s2_azm, s1_azm)/60.0, diff_steps(s2_alt, s1_alt)/60.0
+
+    async def goto_position(self, target_azm, target_alt, ra=None, dec=None):
+        """
+        Executes a GoTo movement with optional anti-backlash approach.
+        
+        Args:
+            target_azm (int): Target azimuth steps.
+            target_alt (int): Target altitude steps.
+            ra (float, optional): Target RA for tracking-based approach.
+            dec (float, optional): Target Dec for tracking-based approach.
+        """
+        approach_mode = "DISABLED"
+        if self.approach_fixed.membervalue == "On": approach_mode = "FIXED"
+        elif self.approach_tracking.membervalue == "On": approach_mode = "TRACKING"
+        
+        # 1. Determine approach direction (positive by default)
+        azm_sign = 1
+        alt_sign = 1
+        
+        if approach_mode == "TRACKING" and ra is not None and dec is not None:
+            rate_azm, rate_alt = await self.get_tracking_rates(ra, dec)
+            azm_sign = 1 if rate_azm >= 0 else -1
+            alt_sign = 1 if rate_alt >= 0 else -1
+
+        if approach_mode != "DISABLED":
+            # 2. Stage 1: Fast GoTo to intermediate position
+            off_azm = int(self.approach_azm_offset.membervalue)
+            off_alt = int(self.approach_alt_offset.membervalue)
+            
+            inter_azm = (target_azm - azm_sign * off_azm) % STEPS_PER_REVOLUTION
+            inter_alt = (target_alt - alt_sign * off_alt) % STEPS_PER_REVOLUTION
+            
+            await asyncio.gather(
+                self._do_slew(AUXTargets.AZM, inter_azm, fast=True),
+                self._do_slew(AUXTargets.ALT, inter_alt, fast=True)
+            )
+            
+            # Wait for both to finish
+            await asyncio.gather(
+                self._wait_for_slew(AUXTargets.AZM),
+                self._wait_for_slew(AUXTargets.ALT)
+            )
+
+        # 3. Final Stage: GoTo to final target
+        # Use SLOW movement for precision if approach was used
+        fast_final = (approach_mode == "DISABLED")
+        s1 = await self._do_slew(AUXTargets.AZM, target_azm, fast=fast_final)
+        s2 = await self._do_slew(AUXTargets.ALT, target_alt, fast=fast_final)
+        
+        return s1 and s2
+
+    async def handle_goto(self, event):
+        """Handles GoTo command using raw encoder steps."""
+        self.absolute_coord_vector.update(event.root)
+        await self.absolute_coord_vector.send_setVector(state="Busy")
+        
+        target_azm = int(self.target_azm.membervalue)
+        target_alt = int(self.target_alt.membervalue)
+        
+        success = await self.goto_position(target_azm, target_alt)
+        
+        state = "Ok" if success else "Alert"
+        await self.absolute_coord_vector.send_setVector(state=state)
+
+    async def slew_to(self, axis, steps, fast=True):
+        """Sends a position-based GoTo command to a motor axis (DEPRECATED: use goto_position)."""
+        return await self._do_slew(axis, steps, fast)
 
     async def handle_sync(self, event):
         """Sets the current hardware position to match driver's internal state."""
@@ -330,7 +445,7 @@ class CelestronAUXDriver(IPyDriver):
             self.park_vector.update(event.root)
         if self.park_switch.membervalue == "On":
             await self.park_vector.send_setVector(state="Busy")
-            if await self.slew_to(AUXTargets.AZM, 0) and await self.slew_to(AUXTargets.ALT, 0):
+            if await self.goto_position(0, 0):
                 self.parked_light.membervalue = "Ok"
                 await self.mount_status_vector.send_setVector()
                 await self.park_vector.send_setVector(state="Ok")
@@ -360,13 +475,12 @@ class CelestronAUXDriver(IPyDriver):
         
         azm_steps, alt_steps = await self.equatorial_to_steps(ra_val, dec_val)
         
-        azm_success = await self.slew_to(AUXTargets.AZM, azm_steps)
-        alt_success = await self.slew_to(AUXTargets.ALT, alt_steps)
+        success = await self.goto_position(azm_steps, alt_steps, ra=ra_val, dec=dec_val)
         
-        state = "Ok" if azm_success and alt_success else "Alert"
+        state = "Ok" if success else "Alert"
         await self.equatorial_vector.send_setVector(state=state)
 
-    async def equatorial_to_steps(self, ra_hours, dec_deg):
+    async def equatorial_to_steps(self, ra_hours, dec_deg, time_offset: float = 0):
         """Converts RA/Dec to motor encoder steps using current observer state."""
         import math
         ra_rad = (ra_hours / 24.0) * 2 * math.pi
@@ -376,7 +490,7 @@ class CelestronAUXDriver(IPyDriver):
         body._ra = ra_rad
         body._dec = dec_rad
         
-        self.update_observer()
+        self.update_observer(time_offset=time_offset)
         body.compute(self.observer)
         
         azm_steps = int((float(body.az) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
@@ -417,6 +531,83 @@ class CelestronAUXDriver(IPyDriver):
             
         await self.mount_status_vector.send_setVector()
         await self.guide_rate_vector.send_setVector(state=state)
+
+    async def handle_track_mode(self, event):
+        """Starts or stops the background tracking loop."""
+        if event and event.root:
+            self.track_mode_vector.update(event.root)
+        
+        if self.track_none.membervalue == "On":
+            if self._tracking_task:
+                self._tracking_task.cancel()
+                self._tracking_task = None
+            # Stop motors
+            if self.communicator and self.communicator.connected:
+                await self.slew_by_rate(AUXTargets.AZM, 0, 1)
+                await self.slew_by_rate(AUXTargets.ALT, 0, 1)
+            self.tracking_light.membervalue = "Idle"
+        else:
+            if not self._tracking_task:
+                self._tracking_task = asyncio.create_task(self._tracking_loop())
+            self.tracking_light.membervalue = "Ok"
+            
+        await self.mount_status_vector.send_setVector()
+        await self.track_mode_vector.send_setVector(state="Ok")
+
+    async def _tracking_loop(self):
+        """
+        Background loop for object tracking using 2nd order prediction.
+        
+        Algorithm: w(t) = (theta(t+dt) - theta(t-dt)) / (2*dt)
+        """
+        try:
+            while True:
+                if not self.communicator or not self.communicator.connected:
+                    await asyncio.sleep(1)
+                    continue
+
+                # 1. Get current target coordinates
+                ra = float(self.ra.membervalue)
+                dec = float(self.dec.membervalue)
+                
+                # 2. Calculate rates using 2nd order differential
+                dt = 1.0 # 1 second delta
+                s_plus_azm, s_plus_alt = await self.equatorial_to_steps(ra, dec, time_offset=dt)
+                s_minus_azm, s_minus_alt = await self.equatorial_to_steps(ra, dec, time_offset=-dt)
+                
+                def diff_steps(s2, s1):
+                    d = s2 - s1
+                    if d > STEPS_PER_REVOLUTION/2: d -= STEPS_PER_REVOLUTION
+                    if d < -STEPS_PER_REVOLUTION/2: d += STEPS_PER_REVOLUTION
+                    return d
+                
+                rate_azm = diff_steps(s_plus_azm, s_minus_azm) / (2.0 * dt)
+                rate_alt = diff_steps(s_plus_alt, s_minus_alt) / (2.0 * dt)
+                
+                # 3. Convert steps/sec to AUX Guide Rate payload
+                # payload = rate_steps_sec * (1024 * 360 * 3600 / 2^24) / 3600
+                factor = (1024.0 * 360.0) / STEPS_PER_REVOLUTION
+                val_azm = int(abs(rate_azm) * factor)
+                val_alt = int(abs(rate_alt) * factor)
+                
+                # 4. Send commands
+                cmd_azm = AUXCommand(
+                    AUXCommands.MC_SET_POS_GUIDERATE if rate_azm >= 0 else AUXCommands.MC_SET_NEG_GUIDERATE,
+                    AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(min(val_azm, 0xFFFF))
+                )
+                cmd_alt = AUXCommand(
+                    AUXCommands.MC_SET_POS_GUIDERATE if rate_alt >= 0 else AUXCommands.MC_SET_NEG_GUIDERATE,
+                    AUXTargets.APP, AUXTargets.ALT, pack_int3_steps(min(val_alt, 0xFFFF))
+                )
+                
+                await self.communicator.send_command(cmd_azm)
+                await self.communicator.send_command(cmd_alt)
+                
+                await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error in tracking loop: {e}")
 
     async def hardware(self):
         """Periodically called to sync hardware state with INDI properties."""

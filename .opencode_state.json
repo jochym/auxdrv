@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-05
-- **Current Phase**: Phase 3.5 - Code Documentation
+- **Current Phase**: Phase 6 - Accessories & Polishing
 
 ## Project Progress
 
@@ -12,35 +12,33 @@
 - **Phase 2**: Simulator headless mode & TCP support
 - **Phase 2.5**: Functional Test Suite
 - **Phase 3**: Astronomical Transformations
-  - Integrated `ephem` for coordinate conversion
-  - Added GEOGRAPHIC_COORD and EQUATORIAL_EOD_COORD properties
-  - Implemented RA/Dec to Encoders GoTo logic
-  - Implemented automatic RA/Dec reporting from Encoders
-  - Added central configuration support in `config.yaml` (Default: Bębło)
+- **Phase 3.5**: Code Documentation
+- **Phase 4**: Anti-backlash GoTo logic
+  - Implemented multi-stage GOTO (Fast approach + Slow final)
+  - Added `GOTO_APPROACH_MODE` (FIXED_OFFSET, TRACKING_DIRECTION)
+- **Phase 5**: Advanced Predictive Tracking (2nd Order)
+  - Implemented background tracking loop (1 Hz)
+  - Used symmetric 2nd order difference algorithm for angular rates
+  - Added `TELESCOPE_TRACK_MODE` (Sidereal, Solar, Lunar)
+  - Added `asyncio.Lock` to serial/TCP communication for bus safety
 
 ### In Progress 🔄
-- **Phase 3.5**: Code Documentation (Docstrings)
-  - Adding Google Style docstrings to all modules
-  - Documenting AUX protocol internals and INDI mapping
+- **Phase 6**: Stability and Polishing
+  - Monitoring tracking accuracy
+  - Preparing for Accessory support
 
 ### Pending Tasks 📋
-1. **Phase 4**: Anti-backlash GoTo logic
-   - Implement `GOTO_APPROACH_MODE` (FIXED_OFFSET, TRACKING_DIRECTION)
-   - Implement two-stage slew mechanism
-2. **Phase 5**: Advanced Predictive Tracking (2nd Order)
-   - Implement symmetric 2nd order differential algorithm for angular velocities
-   - Design extensible tracking loop (ready for Satellites/Comets)
-3. **Phase 6**: Functional Verification & Accessories
-   - Support for Focuser and GPS modules
-   - Comprehensive tracking drift tests
+1. Implement Focuser support (`MC_FOCUS` targets)
+2. Implement GPS module support
+3. Perform long-term tracking drift tests
 
 ## Technical Notes
-- Current location: Bębło (50.1822 N, 19.7925 E)
-- Configuration format: YAML (`config.yaml`)
-- Test suite: `tests/test_functional.py`
+- Communication Lock: `AUXCommunicator` now serializes all bus traffic.
+- Tracking Algorithm: `w(t) = (pos(t+dt) - pos(t-dt)) / (2*dt)`.
+- Anti-backlash: Intermediate target is `target - sign(v) * offset`.
 
 ## Repository State
 - **Branch**: main
-- **Last Commit**: f77da2c - Switch configuration format from JSON to YAML
+- **Last Commit**: e9cd8ad - Fix deprecated function calls and test wrap-around logic
 - **Working Directory**: /home/jochym/Projects/INDI/auxdrv
-- **Git Status**: Clean (pre-documentation)
+- **Git Status**: Changes ready for commit (v0.4.0)
