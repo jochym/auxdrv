@@ -148,11 +148,11 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
     async def test_6_equatorial_goto(self):
         """Test GoTo movement using RA/Dec coordinates."""
-        # Location is loaded from config.json by default in the driver,
+        # Location is loaded from config.yaml by default in the driver,
         # but we can set it explicitly to be sure.
-        import json
-        with open('config.json', 'r') as f:
-            cfg = json.load(f).get('observer', {})
+        import yaml
+        with open('config.yaml', 'r') as f:
+            cfg = yaml.safe_load(f).get('observer', {})
         
         self.driver.lat.membervalue = cfg.get('latitude', 50.1822)
         self.driver.long.membervalue = cfg.get('longitude', 19.7925)

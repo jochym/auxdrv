@@ -68,7 +68,7 @@ Poniżej przedstawiono listę zadań i kierunków dalszego rozwoju sterownika:
 ### 8. Konfiguracja i Integracja ze Stellarium (ZAKOŃCZONO)
 *   **Cel:** Łatwiejsza weryfikacja wizualna i centralne zarządzanie ustawieniami.
 *   **Zrealizowane zadania:**
-    *   ✅ Dodano plik `config.json` z domyślnymi współrzędnymi dla miejscowości **Bębło**.
+    *   ✅ Dodano plik `config.yaml` z domyślnymi współrzędnymi dla miejscowości **Bębło**.
     *   ✅ Zaimplementowano ładowanie konfiguracji w sterowniku INDI oraz symulatorze.
     *   ✅ Opisano proces podłączenia Stellarium do portu `10001` symulatora.
 

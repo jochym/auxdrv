@@ -5,11 +5,11 @@ import indipydriver
 from indipydriver import IPyDriver, Device, SwitchVector, SwitchMember, TextVector, TextMember, NumberVector, NumberMember, LightVector, LightMember
 import ephem
 from datetime import datetime
-import json
+import yaml
 import os
 
 # Load configuration
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.json')
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 DEFAULT_CONFIG = {
     "observer": {
         "latitude": 50.1822,
@@ -22,7 +22,7 @@ def load_config():
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, 'r') as f:
-                return json.load(f)
+                return yaml.safe_load(f)
         except Exception as e:
             print(f"Error loading config: {e}")
     return DEFAULT_CONFIG

@@ -47,4 +47,4 @@ Symulator udostępnia serwer zgodny z protokołem Stellarium na porcie `10001`. 
 
 ## Konfiguracja
 
-Lokalizacja obserwatora oraz porty są definiowane w pliku `config.json`. Domyślnie ustawiono współrzędne dla miejscowości **Bębło, Polska**.
+Lokalizacja obserwatora oraz porty są definiowane w pliku `config.yaml`. Domyślnie ustawiono współrzędne dla miejscowości **Bębło, Polska**.
