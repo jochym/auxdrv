@@ -3,6 +3,8 @@ import serial_asyncio
 from enum import Enum
 import indipydriver
 from indipydriver import IPyDriver, Device, SwitchVector, SwitchMember, TextVector, TextMember, NumberVector, NumberMember, LightVector, LightMember
+import ephem
+from datetime import datetime
 
 # Enums from auxproto.h
 class AUXCommands(Enum):
@@ -256,18 +258,43 @@ class CelestronAUXDriver(IPyDriver):
         self.unpark_switch = SwitchMember("UNPARK", "Unpark", "Off")
         self.unpark_vector = SwitchVector("TELESCOPE_UNPARK", "Unpark Mount", "Main", "rw", "AtMostOne", "Idle", [self.unpark_switch])
 
+        # Geographical location (standard INDI property)
+        self.lat = NumberMember("LAT", "Latitude (deg)", " %06.2f", -90, 90, 0, 50.05)
+        self.long = NumberMember("LONG", "Longitude (deg)", " %06.2f", -360, 360, 0, 20.02)
+        self.elev = NumberMember("ELEV", "Elevation (m)", " %04.0f", -1000, 10000, 0, 200)
+        self.location_vector = NumberVector("GEOGRAPHIC_COORD", "Location", "Site", "rw", "Idle", [self.lat, self.long, self.elev])
+
+        # Equatorial coordinates (standard INDI property)
+        self.ra = NumberMember("RA", "Right Ascension (h)", "%08.3f", 0, 24, 0, 0)
+        self.dec = NumberMember("DEC", "Declination (deg)", "%08.3f", -90, 90, 0, 0)
+        self.equatorial_vector = NumberVector("EQUATORIAL_EOD_COORD", "Equatorial JNow", "Main", "rw", "Idle", [self.ra, self.dec])
+
         # Create device
         self.device = Device("Celestron AUX", [
             self.connection_vector, self.port_vector, self.baud_vector, self.firmware_vector,
             self.mount_position_vector, self.mount_status_vector, self.slew_rate_vector,
             self.motion_ns_vector, self.motion_we_vector, self.absolute_coord_vector,
-            self.guide_rate_vector, self.sync_vector, self.park_vector, self.unpark_vector
+            self.guide_rate_vector, self.sync_vector, self.park_vector, self.unpark_vector,
+            self.location_vector, self.equatorial_vector
         ])
 
         super().__init__(self.device)
         self.communicator = None
         self.current_azm_steps = 0
         self.current_alt_steps = 0
+        
+        # ephem Observer for transformations
+        self.observer = ephem.Observer()
+        self.update_observer()
+
+    def update_observer(self):
+        # ephem expects longitude/latitude in radians, and longitude is East-positive in ephem
+        # INDI standard: Longitude is degrees, East is positive. ephem Longitude: Radians, East is positive.
+        import math
+        self.observer.lat = str(self.lat.membervalue)
+        self.observer.lon = str(self.long.membervalue)
+        self.observer.elevation = float(self.elev.membervalue)
+        self.observer.date = datetime.utcnow()
 
     async def rxevent(self, event):
         if event.vectorname == "CONNECTION":
@@ -295,6 +322,12 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_unpark(event)
         elif event.vectorname == "TELESCOPE_GUIDE_RATE":
             await self.handle_guide_rate(event)
+        elif event.vectorname == "GEOGRAPHIC_COORD":
+            self.location_vector.update(event.root)
+            self.update_observer()
+            await self.location_vector.send_setVector(state="Ok")
+        elif event.vectorname == "EQUATORIAL_EOD_COORD":
+            await self.handle_equatorial_goto(event)
 
     async def handle_connection(self, event):
         if event and event.root:
@@ -348,6 +381,12 @@ class CelestronAUXDriver(IPyDriver):
             self.alt_steps.membervalue = self.current_alt_steps
             
         await self.mount_position_vector.send_setVector(state="Ok")
+        
+        # Calculate current RA/Dec
+        ra_val, dec_val = await self.steps_to_equatorial(self.current_azm_steps, self.current_alt_steps)
+        self.ra.membervalue = ra_val
+        self.dec.membervalue = dec_val
+        await self.equatorial_vector.send_setVector(state="Ok")
 
     async def handle_motion_ns(self, event):
         self.motion_ns_vector.update(event.root)
@@ -434,6 +473,54 @@ class CelestronAUXDriver(IPyDriver):
             await self.mount_status_vector.send_setVector()
             self.unpark_switch.membervalue = "Off"
             await self.unpark_vector.send_setVector(state="Ok")
+
+    async def handle_equatorial_goto(self, event):
+        if event and event.root:
+            self.equatorial_vector.update(event.root)
+        await self.equatorial_vector.send_setVector(state="Busy")
+        
+        ra_val = float(self.ra.membervalue)
+        dec_val = float(self.dec.membervalue)
+        
+        azm_steps, alt_steps = await self.equatorial_to_steps(ra_val, dec_val)
+        
+        print(f"GoTo RA={ra_val}, Dec={dec_val} -> AzmSteps={azm_steps}, AltSteps={alt_steps}")
+        
+        azm_success = await self.slew_to(AUXTargets.AZM, azm_steps)
+        alt_success = await self.slew_to(AUXTargets.ALT, alt_steps)
+        
+        state = "Ok" if azm_success and alt_success else "Alert"
+        await self.equatorial_vector.send_setVector(state=state)
+
+    async def equatorial_to_steps(self, ra_hours, dec_deg):
+        import math
+        # INDI RA (hours) -> radians
+        ra_rad = (ra_hours / 24.0) * 2 * math.pi
+        # INDI Dec (degrees) -> radians
+        dec_rad = (dec_deg / 360.0) * 2 * math.pi
+        
+        body = ephem.FixedBody()
+        body._ra = ra_rad
+        body._dec = dec_rad
+        
+        self.update_observer() # Refresh time
+        body.compute(self.observer)
+        
+        azm_steps = int((float(body.az) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
+        alt_steps = int((float(body.alt) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
+        return azm_steps, alt_steps
+
+    async def steps_to_equatorial(self, azm_steps, alt_steps):
+        import math
+        az_rad = (azm_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
+        alt_rad = (alt_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
+        
+        self.update_observer() # Refresh time
+        ra_rad, dec_rad = self.observer.radec_of(az_rad, alt_rad)
+        
+        ra_hours = (ra_rad / (2 * math.pi)) * 24
+        dec_deg = (dec_rad / (2 * math.pi)) * 360
+        return ra_hours, dec_deg
 
     async def handle_guide_rate(self, event):
         if event and event.root:

@@ -146,5 +146,33 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             await self.driver.handle_connection(None)
             self.assertTrue(self.driver.communicator and self.driver.communicator.connected)
 
+    async def test_6_equatorial_goto(self):
+        """Test GoTo movement using RA/Dec coordinates."""
+        # Set location (Kraków)
+        self.driver.lat.membervalue = 50.06
+        self.driver.long.membervalue = 19.94
+        self.driver.update_observer()
+        
+        # Target RA/Dec (Polaris approx)
+        self.driver.ra.membervalue = 2.5
+        self.driver.dec.membervalue = 89.2
+        
+        await self.driver.handle_equatorial_goto(None)
+        
+        # Wait for movement to complete
+        reached = False
+        for _ in range(15):
+            await self.driver.read_mount_position()
+            # Check if reported RA/Dec is near target
+            ra = float(self.driver.ra.membervalue)
+            dec = float(self.driver.dec.membervalue)
+            # print(f"Eq GoTo progress: RA={ra:.3f}, DEC={dec:.3f}")
+            if abs(ra - 2.5) < 0.1 and abs(dec - 89.2) < 0.5:
+                reached = True
+                break
+            await asyncio.sleep(1)
+            
+        self.assertTrue(reached, f"RA/Dec target not reached. Final: RA={self.driver.ra.membervalue}, DEC={self.driver.dec.membervalue}")
+
 if __name__ == "__main__":
     unittest.main()

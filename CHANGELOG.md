@@ -2,6 +2,19 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.3.0] - 2026-01-05
+
+### Added
+- Integracja z biblioteką `ephem` dla transformacji współrzędnych astronomicznych.
+- Obsługa właściwości INDI `GEOGRAPHIC_COORD` (szerokość, długość, wysokość).
+- Obsługa właściwości INDI `EQUATORIAL_EOD_COORD` (RA/Dec).
+- Implementacja logiki GoTo na współrzędne równikowe (RA/Dec -> Alt/Az -> Encoders).
+- Automatyczne wyliczanie i raportowanie bieżącego RA/Dec na podstawie pozycji enkodera.
+- Nowy test funkcjonalny `test_6_equatorial_goto` weryfikujący poprawność transformacji.
+
+### Changed
+- Poprawiono odporność metody `handle_equatorial_goto` na brak danych zdarzenia.
+
 ## [0.2.1] - 2026-01-05
 
 ### Added

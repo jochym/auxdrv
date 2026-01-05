@@ -22,16 +22,20 @@
   - Created robust test suite in `tests/test_functional.py`
   - Verified Connection, Movement, Tracking, and Park logic
   - Fixed driver robustness issues during testing
+- **Phase 3**: Astronomical Transformations
+  - Integrated `ephem` for coordinate conversion
+  - Added GEOGRAPHIC_COORD and EQUATORIAL_EOD_COORD properties
+  - Implemented RA/Dec to Encoders GoTo logic
+  - Implemented automatic RA/Dec reporting from Encoders
 
 ### In Progress 🔄
-- **Phase 3**: Astronomical Transformations & RA/Dec implementation
-  - Goal: Implement RA/Dec to Alt/Az conversion using ephem
+- **Phase 3**: Verification and Polishing
+  - Creating automated tests for astronomical GoTo
 
 ### Pending Tasks 📋
-1. Implement RA/Dec to Alt/Az conversion using ephem
-2. Add INDI properties for Right Ascension and Declination
-3. Implement tracking modes (Sidereal, Solar, Lunar)
-4. Create automated test suite for astronomical movements
+1. Implement tracking modes (Sidereal, Solar, Lunar)
+2. Add Focuser and GPS support
+3. Create automated test suite for tracking modes
 
 ## Technical Notes
 
