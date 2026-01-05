@@ -194,7 +194,8 @@ def main(stdscr, args):
 
     telescope = NexStarScope(stdscr=stdscr, tui=not args.text)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     
     scope = loop.run_until_complete(
                 asyncio.start_server(handle_port2000, host='', port=args.port))

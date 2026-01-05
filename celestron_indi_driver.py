@@ -16,7 +16,7 @@ from indipydriver import (
     LightVector, LightMember
 )
 import ephem
-from datetime import datetime
+from datetime import datetime, timezone
 import yaml
 import os
 
@@ -157,7 +157,7 @@ class CelestronAUXDriver(IPyDriver):
         self.observer.lat = str(self.lat.membervalue)
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
-        self.observer.date = datetime.utcnow()
+        self.observer.date = datetime.now(timezone.utc).replace(tzinfo=None)
 
     async def rxevent(self, event):
         """Main event handler for INDI property updates."""

@@ -118,7 +118,12 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             await self.driver.read_mount_position()
             azm = int(self.driver.azm_steps.membervalue)
             alt = int(self.driver.alt_steps.membervalue)
-            if azm < 1000 and alt < 1000: # Very lenient
+            
+            # Distance to 0 with wrap-around
+            dist_azm = min(azm, 16777216 - azm)
+            dist_alt = min(alt, 16777216 - alt)
+            
+            if dist_azm < 1000 and dist_alt < 1000: 
                 reached_home = True
                 break
             await asyncio.sleep(1)
