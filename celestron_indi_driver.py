@@ -209,9 +209,8 @@ class CelestronAUXDriver(IPyDriver):
         self.connection_vector = SwitchVector("CONNECTION", "Connection", "Main", "rw", "OneOfMany", "Idle", [self.conn_connect, self.conn_disconnect])
 
         self.port_name = TextMember("PORT_NAME", "Port Name", "/dev/ttyUSB0")
-        self.baud_rate = NumberMember("BAUD_RATE", "Baud Rate", 19200, 9600, 115200, 1, "%d")
+        self.baud_rate = NumberMember("BAUD_RATE", "Baud Rate", "%d", 9600, 115200, 1, 19200)
         self.port_vector = TextVector("PORT", "Serial Port", "Main", "rw", "Idle", [self.port_name])
-        # Note: BAUD_RATE is a number, should be in its own vector or we use TextVector for simplicity if needed
         self.baud_vector = NumberVector("BAUD", "Baud Rate", "Main", "rw", "Idle", [self.baud_rate])
 
         self.model = TextMember("MODEL", "Model", "Unknown")
@@ -220,8 +219,8 @@ class CelestronAUXDriver(IPyDriver):
         self.alt_ver = TextMember("ALT_VERSION", "ALT Version", "Unknown")
         self.firmware_vector = TextVector("FIRMWARE_INFO", "Firmware Info", "Main", "ro", "Idle", [self.model, self.hc_ver, self.azm_ver, self.alt_ver])
 
-        self.azm_steps = NumberMember("AZM_STEPS", "AZM Steps", 0, 0, STEPS_PER_REVOLUTION - 1, 1, "%d")
-        self.alt_steps = NumberMember("ALT_STEPS", "ALT Steps", 0, 0, STEPS_PER_REVOLUTION - 1, 1, "%d")
+        self.azm_steps = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.alt_steps = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
         self.mount_position_vector = NumberVector("MOUNT_POSITION", "Mount Position", "Main", "ro", "Idle", [self.azm_steps, self.alt_steps])
 
         self.slewing_light = LightMember("SLEWING", "Slewing", "Idle")
@@ -229,7 +228,7 @@ class CelestronAUXDriver(IPyDriver):
         self.parked_light = LightMember("PARKED", "Parked", "Idle")
         self.mount_status_vector = LightVector("MOUNT_STATUS", "Mount Status", "Main", "Idle", [self.slewing_light, self.tracking_light, self.parked_light])
 
-        self.slew_rate = NumberMember("RATE", "Rate (1-9)", 1, 1, 9, 1, "%d")
+        self.slew_rate = NumberMember("RATE", "Rate (1-9)", "%d", 1, 9, 1, 1)
         self.slew_rate_vector = NumberVector("SLEW_RATE", "Slew Rate", "Main", "rw", "Idle", [self.slew_rate])
 
         self.motion_n = SwitchMember("MOTION_N", "North", "Off")
@@ -240,8 +239,8 @@ class CelestronAUXDriver(IPyDriver):
         self.motion_e = SwitchMember("MOTION_E", "East", "Off")
         self.motion_we_vector = SwitchVector("TELESCOPE_MOTION_WE", "Motion W/E", "Main", "rw", "AtMostOne", "Idle", [self.motion_w, self.motion_e])
 
-        self.target_azm = NumberMember("AZM_STEPS", "AZM Steps", 0, 0, STEPS_PER_REVOLUTION - 1, 1, "%d")
-        self.target_alt = NumberMember("ALT_STEPS", "ALT Steps", 0, 0, STEPS_PER_REVOLUTION - 1, 1, "%d")
+        self.target_azm = NumberMember("AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
+        self.target_alt = NumberMember("ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0)
         self.absolute_coord_vector = NumberVector("TELESCOPE_ABSOLUTE_COORD", "Absolute Coordinates", "Main", "rw", "Idle", [self.target_azm, self.target_alt])
 
         self.sync_switch = SwitchMember("SYNC", "Sync", "Off")
@@ -292,7 +291,8 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_unpark(event)
 
     async def handle_connection(self, event):
-        self.connection_vector.update(event.root)
+        if event and event.root:
+            self.connection_vector.update(event.root)
         if self.conn_connect.membervalue == "On":
             self.communicator = AUXCommunicator(self.port_name.membervalue, int(self.baud_rate.membervalue))
             if await self.communicator.connect():
