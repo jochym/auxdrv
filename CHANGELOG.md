@@ -2,6 +2,17 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.2.1] - 2026-01-05
+
+### Added
+- Kompletny zestaw testów funkcjonalnych w katalogu `tests/` oparty na `unittest`.
+- Testy pokrywają: Firmware Info, GoTo Precision, Tracking Logic, Park/Unpark, Connection Robustness.
+- Automatyczne przechwytywanie logów symulatora podczas testów (`test_sim.log`).
+
+### Changed
+- Poprawiono odporność metod `handle_sync`, `handle_park`, `handle_unpark`, `handle_guide_rate` na brak danych zdarzenia (ułatwia testowanie).
+- Zsynchronizowano stan projektu i roadmapę.
+
 ## [0.2.0] - 2026-01-05
 
 ### Added

@@ -400,7 +400,8 @@ class CelestronAUXDriver(IPyDriver):
         return False
 
     async def handle_sync(self, event):
-        self.sync_vector.update(event.root)
+        if event and event.root:
+            self.sync_vector.update(event.root)
         if self.sync_switch.membervalue == "On":
             await self.sync_vector.send_setVector(state="Busy")
             cmd_azm = AUXCommand(AUXCommands.MC_SET_POSITION, AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(self.current_azm_steps))
@@ -412,7 +413,8 @@ class CelestronAUXDriver(IPyDriver):
             await self.sync_vector.send_setVector(state=state)
 
     async def handle_park(self, event):
-        self.park_vector.update(event.root)
+        if event and event.root:
+            self.park_vector.update(event.root)
         if self.park_switch.membervalue == "On":
             await self.park_vector.send_setVector(state="Busy")
             if await self.slew_to(AUXTargets.AZM, 0) and await self.slew_to(AUXTargets.ALT, 0):
@@ -425,7 +427,8 @@ class CelestronAUXDriver(IPyDriver):
             await self.park_vector.send_setVector()
 
     async def handle_unpark(self, event):
-        self.unpark_vector.update(event.root)
+        if event and event.root:
+            self.unpark_vector.update(event.root)
         if self.unpark_switch.membervalue == "On":
             self.parked_light.membervalue = "Idle"
             await self.mount_status_vector.send_setVector()

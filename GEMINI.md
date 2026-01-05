@@ -65,6 +65,14 @@ Poniżej przedstawiono listę zadań i kierunków dalszego rozwoju sterownika:
     *   ✅ Mechanizm pomijania echa (Echo Skipping) dla poprawnej pracy w sieci.
     *   ✅ Aktualizacja kodu do API `indipydriver 3.0.4`.
 
+### 7. Kompletny zestaw testów funkcjonalnych (W TRAKCIE - Faza 2.5)
+*   **Cel:** Zapewnienie stabilności sterownika przed dodaniem logiki astronomicznej.
+*   **Zakres testów:**
+    *   **Stabilność połączenia:** Testy wielokrotnego łączenia i obsługi błędów sieciowych.
+    *   **Precyzja GoTo:** Weryfikacja osiągania zadanych kroków enkodera w obu osiach.
+    *   **Logika Śledzenia:** Pomiary prędkości zmian pozycji przy różnych Guide Rates.
+    *   **Maszyna Stanów:** Sprawdzanie poprawności flag SLEWING, TRACKING, PARKED.
+
 ## Instrukcje uruchamiania sterownika (v0.2.0)
 
 ### Wymagane zależności:

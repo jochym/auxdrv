@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-05
-- **Current Phase**: Phase 2 - Simulator Refactoring
+- **Current Phase**: Phase 3 - Astronomical Transformations
 
 ## Project Progress
 
@@ -18,9 +18,14 @@
   - AUXCommunicator updated with socket:// support
   - Echo skipping logic implemented in AUX protocol
   - Driver aligned with indipydriver 3.0.4 API
+- **Phase 2.5**: Functional Test Suite
+  - Created robust test suite in `tests/test_functional.py`
+  - Verified Connection, Movement, Tracking, and Park logic
+  - Fixed driver robustness issues during testing
 
 ### In Progress 🔄
 - **Phase 3**: Astronomical Transformations & RA/Dec implementation
+  - Goal: Implement RA/Dec to Alt/Az conversion using ephem
 
 ### Pending Tasks 📋
 1. Implement RA/Dec to Alt/Az conversion using ephem
@@ -30,20 +35,16 @@
 
 ## Technical Notes
 
-### Simulator Analysis
-- `nse_simulator.py` uses curses for TUI interface
-- `nse_telescope.py` has `self.tui` dependency for printing
-- Main function `main(stdscr)` needs modification for headless mode
-- Network server code is already well-structured
+### Test Suite
+- Run with: `./venv/bin/python tests/test_functional.py`
+- Logs: `test_sim.log` contains simulator output during tests
 
 ### Next Actions
-1. Add argparse for `--headless` flag
-2. Replace curses calls with logging
-3. Create HeadlessTUI class for compatibility
-4. Maintain existing TCP server functionality
+- Integrate `ephem.Observer` into the driver
+- Map INDI RA/Dec properties to AUX MC commands
 
 ## Repository State
 - **Branch**: main
-- **Last Commit**: 5f767e7 - Initial commit: Celestron AUX driver v0.1.0
+- **Last Commit**: def3033 - Add tracking support and complete extended control test
 - **Working Directory**: /home/jochym/Projects/INDI/auxdrv
 - **Git Status**: Clean (committed files ready)
