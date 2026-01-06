@@ -31,24 +31,3 @@
 2. Implement Cord Wrap Prevention logic
 3. Add Focuser support (MC_FOCUS targets)
 4. Add GPS module support
-
-### In Progress 🔄
-- **Phase 6**: Safety features
-  - Planning Slew Limits and Cord Wrap Prevention
-
-### Pending Tasks 📋
-1. Implement Slew Limits (ALT/AZ min/max)
-2. Implement Cord Wrap Prevention logic
-3. Add Focuser support (MC_FOCUS targets)
-4. Add GPS module support
-
-## Technical Notes
-- Communication Lock: `AUXCommunicator` now serializes all bus traffic.
-- Tracking Algorithm: `w(t) = (pos(t+dt) - pos(t-dt)) / (2*dt)`.
-- Anti-backlash: Intermediate target is `target - sign(v) * offset`.
-
-## Repository State
-- **Branch**: main
-- **Last Commit**: e9cd8ad - Fix deprecated function calls and test wrap-around logic
-- **Working Directory**: /home/jochym/Projects/INDI/auxdrv
-- **Git Status**: Changes ready for commit (v0.4.0)
