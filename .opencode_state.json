@@ -20,6 +20,17 @@
   - Implemented 3-point Matrix Alignment system
   - Added stabilized velocity monitoring (Motor & Sky) with sliding window
   - Added debug mode (-d) for real-time telemetry logging
+  - Optimized slew speeds and stability for automated testing
+
+### In Progress 🔄
+- **Phase 6**: Safety features
+  - Planning Slew Limits and Cord Wrap Prevention
+
+### Pending Tasks 📋
+1. Implement Slew Limits (ALT/AZ min/max)
+2. Implement Cord Wrap Prevention logic
+3. Add Focuser support (MC_FOCUS targets)
+4. Add GPS module support
 
 ### In Progress 🔄
 - **Phase 6**: Safety features

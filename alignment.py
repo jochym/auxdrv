@@ -33,7 +33,7 @@ def vector_to_radec(vec):
     if norm < 1e-9: return 0, 0
     vx, vy, vz = [x/norm for x in vec]
     
-    dec_rad = math.asin(vz)
+    dec_rad = math.asin(max(-1.0, min(1.0, vz)))
     ra_rad = math.atan2(vy, vx)
     
     dec_deg = math.degrees(dec_rad)
@@ -46,7 +46,7 @@ def vector_to_altaz(vec):
     if norm < 1e-9: return 0, 0
     vx, vy, vz = [x/norm for x in vec]
     
-    alt_rad = math.asin(vz)
+    alt_rad = math.asin(max(-1.0, min(1.0, vz)))
     az_rad = math.atan2(vy, vx)
     
     alt_deg = math.degrees(alt_rad)
@@ -55,7 +55,7 @@ def vector_to_altaz(vec):
 
 class AlignmentModel:
     """
-    Manages N-point alignment transformation.
+    Manages N-point alignment transformation using a 3x3 matrix.
     """
     def __init__(self):
         self.points = [] # List of (SkyVector, MountVector)
@@ -63,17 +63,20 @@ class AlignmentModel:
         self.inv_matrix = None
 
     def add_point(self, sky_vec, mount_vec):
+        """Adds an alignment point and recomputes the transformation matrix."""
         self.points.append((sky_vec, mount_vec))
         if len(self.points) > 3:
             self.points.pop(0)
         self._compute_matrix()
 
     def clear(self):
+        """Clears all alignment points and resets to identity transformation."""
         self.points = []
         self.matrix = None
+        self.inv_matrix = None
 
     def _compute_matrix(self):
-        """Computes the transformation matrix and its inverse."""
+        """Computes the transformation matrix and its inverse using 3 points."""
         if len(self.points) < 3:
             self.matrix = None
             self.inv_matrix = None
@@ -83,9 +86,6 @@ class AlignmentModel:
         E = [p[1] for p in self.points]
         
         try:
-            # S matrix (3x3) where each column is a sky vector
-            # E matrix (3x3) where each column is a mount vector
-            
             def invert_3x3(M):
                 det = (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) -
                        M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) +
@@ -112,24 +112,33 @@ class AlignmentModel:
                             C[i][j] += A[i][k] * B[k][j]
                 return C
 
-            # Construct S and E as matrices where vectors are columns
+            # mat_S: columns are sky vectors
             mat_S = [[S[j][i] for j in range(3)] for i in range(3)]
+            # mat_E: columns are mount vectors
             mat_E = [[E[j][i] for j in range(3)] for i in range(3)]
             
             inv_S = invert_3x3(mat_S)
             if inv_S:
                 self.matrix = mat_mul(mat_E, inv_S)
                 self.inv_matrix = invert_3x3(self.matrix)
-                # print(f"Alignment: Matrix computed. Det(S)={det}")
-        except Exception as e:
-            # print(f"Alignment: Matrix computation error: {e}")
+        except Exception:
             self.matrix = None
             self.inv_matrix = None
 
     def transform_to_mount(self, sky_vec):
         """Applies transformation to a sky vector to get mount vector."""
-        return sky_vec
+        if self.matrix is None: return sky_vec
+        res = [0, 0, 0]
+        for i in range(3):
+            for j in range(3):
+                res[i] += self.matrix[i][j] * sky_vec[j]
+        return res
 
     def transform_to_sky(self, mount_vec):
         """Applies inverse transformation to a mount vector to get sky vector."""
-        return mount_vec
+        if self.inv_matrix is None: return mount_vec
+        res = [0, 0, 0]
+        for i in range(3):
+            for j in range(3):
+                res[i] += self.inv_matrix[i][j] * mount_vec[j]
+        return res

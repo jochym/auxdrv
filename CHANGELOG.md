@@ -2,6 +2,16 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.5.3] - 2026-01-06
+
+### Added
+- Nowy test funkcjonalny `test_6b_robustness_pole` sprawdzający stabilność sterownika w pobliżu bieguna niebieskiego.
+
+### Fixed
+- Zwiększono prędkości GoTo w symulatorze (Fast: 5°/s, Slow: 1°/s) oraz wydłużono timeouty w sterowniku, eliminując błędy czasu oczekiwania w testach.
+- Poprawiono model fizyczny ruchu w symulatorze (płynniejsze hamowanie i brak oscylacji przy celu).
+- Zabezpieczono funkcje matematyczne przed błędami precyzji w pobliżu osobliwości (bieguny, zenit).
+
 ## [0.5.2] - 2026-01-06
 
 ### Added

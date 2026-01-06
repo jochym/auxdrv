@@ -155,8 +155,8 @@ class NexStarScope:
         self.goto = False
         self.alt_guiderate = 0.0
         self.azm_guiderate = 0.0
-        self.alt_maxrate = 4000
-        self.azm_maxrate = 4000
+        self.alt_maxrate = 18000 # 5 deg/s
+        self.azm_maxrate = 18000
         self.use_maxrate = False
         self.cmd_log = deque(maxlen=30)
         self.msg_log = deque(maxlen=10)
@@ -299,7 +299,7 @@ class NexStarScope:
         self.last_cmd = 'GOTO_SLOW'
         self.slewing = self.goto = True
         self.guiding = False
-        r = 0.2 / 360
+        r = 1.0 / 360 # 1 deg/s
         a = unpack_int3(data)
         if rcv == 0x11:
             self.trg_alt = a
@@ -426,7 +426,9 @@ class NexStarScope:
                 else:
                     s = 1 if diff > 0 else -1
                     r = min(maxrate, abs(getattr(self, rate_attr)))
-                    if r * interval > abs(diff): r = abs(diff) / interval / 2
+                    # Use full speed to target if within reach, avoiding oscillations
+                    if r * interval >= abs(diff):
+                        r = abs(diff) / interval
                     setattr(self, rate_attr, s * r)
 
         if abs(self.azm_rate) < eps and abs(self.alt_rate) < eps:
