@@ -2,6 +2,13 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.5.1] - 2026-01-06
+
+### Added
+- Rozszerzenie interfejsu TUI symulatora o wyświetlanie prędkości obrotu silników (vAlt, vAzm) w °/s.
+- Wyświetlanie prędkości poruszania się po sferze niebieskiej (vRA, vDec) w "/s (arcsec/s).
+- Poprawa stylizacji interfejsu Textual.
+
 ## [0.5.0] - 2026-01-05
 
 ### Added

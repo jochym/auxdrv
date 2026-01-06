@@ -210,6 +210,7 @@ class SimulatorApp(App):
     
     .cyan { color: #7dcfff; }
     .yellow { color: #e0af68; }
+    .blue { color: #7aa2f7; }
     .green { color: #9ece6a; }
     .magenta { color: #bb9af7; }
     .red { color: #f7768e; }
@@ -226,6 +227,9 @@ class SimulatorApp(App):
         self.telescope = tel
         self.obs = obs
         self.args = args
+        self.prev_ra = None
+        self.prev_dec = None
+        self.prev_time = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -234,9 +238,13 @@ class SimulatorApp(App):
                 yield Static("MOUNT POSITION", classes="panel-title")
                 yield Static(id="pos-alt")
                 yield Static(id="pos-azm")
+                yield Static(id="vel-alt")
+                yield Static(id="vel-azm")
                 yield Static("")
                 yield Static(id="pos-ra")
                 yield Static(id="pos-dec")
+                yield Static(id="vel-ra")
+                yield Static(id="vel-dec")
                 yield Static("")
                 yield Static("STATUS & TELEMETRY", classes="panel-title")
                 yield Static(id="status-mode")
@@ -261,17 +269,47 @@ class SimulatorApp(App):
         alt_str = repr_angle(self.telescope.alt)
         azm_str = repr_angle(self.telescope.azm)
         
+        # Physical velocities (deg/s)
+        v_alt = self.telescope.alt_rate * 360.0
+        v_azm = self.telescope.azm_rate * 360.0
+        
+        now = datetime.now(timezone.utc)
         self.obs.date = ephem.now()
         rajnow, decjnow = self.obs.radec_of(self.telescope.azm * 2 * pi, self.telescope.alt * 2 * pi)
         
+        # Calculate sky velocities
+        v_ra = 0.0
+        v_dec = 0.0
+        if self.prev_time is not None and self.prev_ra is not None and self.prev_dec is not None:
+            dt = (now - self.prev_time).total_seconds()
+            if dt > 0:
+                d_ra = float(rajnow) - self.prev_ra
+                if d_ra > pi: d_ra -= 2*pi
+                if d_ra < -pi: d_ra += 2*pi
+                
+                d_dec = float(decjnow) - self.prev_dec
+                
+                v_ra = (d_ra * (180.0/pi)) / dt # deg/s
+                v_dec = (d_dec * (180.0/pi)) / dt # deg/s
+        
+        self.prev_ra = float(rajnow)
+        self.prev_dec = float(decjnow)
+        self.prev_time = now
+
         mode = "SLEWING" if self.telescope.slewing else ("GUIDING" if self.telescope.guiding else "IDLE")
         tracking = "ON" if self.telescope.guiding else "OFF"
         battery = f"{self.telescope.bat_voltage / 1e6:.2f}V"
 
         self.query_one("#pos-alt").update(f"Alt: [cyan]{alt_str}[/cyan]")
         self.query_one("#pos-azm").update(f"Azm: [cyan]{azm_str}[/cyan]")
+        self.query_one("#vel-alt").update(f"vAlt: [blue]{v_alt:+.4f}°/s[/blue]")
+        self.query_one("#vel-azm").update(f"vAzm: [blue]{v_azm:+.4f}°/s[/blue]")
+        
         self.query_one("#pos-ra").update(f"RA:  [yellow]{rajnow}[/yellow]")
         self.query_one("#pos-dec").update(f"Dec: [yellow]{decjnow}[/yellow]")
+        self.query_one("#vel-ra").update(f"vRA:  [blue]{v_ra*3600:+.2f}\"/s[/blue]")
+        self.query_one("#vel-dec").update(f"vDec: [blue]{v_dec*3600:+.2f}\"/s[/blue]")
+        
         self.query_one("#status-mode").update(f"Mode: [green]{mode}[/green]")
         self.query_one("#status-tracking").update(f"Tracking: [magenta]{tracking}[/magenta]")
         self.query_one("#status-battery").update(f"Battery: [red]{battery}[/red]")
