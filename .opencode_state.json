@@ -18,7 +18,8 @@
 - **Phase 5.5**: Modern TUI & Alignment System
   - Implemented Textual TUI for simulator
   - Implemented 3-point Matrix Alignment system
-  - Added real-time velocity monitoring (Motor & Sky) to TUI
+  - Added stabilized velocity monitoring (Motor & Sky) with sliding window
+  - Added debug mode (-d) for real-time telemetry logging
 
 ### In Progress 🔄
 - **Phase 6**: Safety features

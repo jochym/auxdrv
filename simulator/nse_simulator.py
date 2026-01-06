@@ -10,6 +10,7 @@ import yaml
 import os
 import socket
 from datetime import datetime, timezone
+from collections import deque
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Log
 from textual.containers import Container, Horizontal, Vertical
@@ -18,6 +19,7 @@ from textual.reactive import reactive
 import ephem
 from math import pi
 import math
+import sys
 
 from nse_telescope import NexStarScope, repr_angle, trg_names, cmd_names
 
@@ -55,10 +57,13 @@ async def broadcast(sport=2000, dport=55555, host='255.255.255.255', seconds_to_
     sck.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sck.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     msg = 110 * b'X'
-    sck.bind(('', sport))
-    while True:
-        sck.sendto(msg, (host, dport))
-        await asyncio.sleep(seconds_to_sleep)
+    try:
+        sck.bind(('', sport))
+        while True:
+            sck.sendto(msg, (host, dport))
+            await asyncio.sleep(seconds_to_sleep)
+    except Exception:
+        pass
 
 async def timer(seconds_to_sleep=1.0, tel=None):
     """Timer loop to trigger physical model updates (ticks)."""
@@ -203,11 +208,6 @@ class SimulatorApp(App):
         margin-bottom: 1;
     }
     
-    #log-view {
-        height: 1fr;
-        border: solid #414868;
-    }
-    
     .cyan { color: #7dcfff; }
     .yellow { color: #e0af68; }
     .blue { color: #7aa2f7; }
@@ -227,9 +227,9 @@ class SimulatorApp(App):
         self.telescope = tel
         self.obs = obs
         self.args = args
-        self.prev_ra = None
-        self.prev_dec = None
-        self.prev_time = None
+        self.ra_samples = deque(maxlen=10)
+        self.dec_samples = deque(maxlen=10)
+        self.time_samples = deque(maxlen=10)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -274,27 +274,28 @@ class SimulatorApp(App):
         v_azm = self.telescope.azm_rate * 360.0
         
         now = datetime.now(timezone.utc)
-        self.obs.date = ephem.now()
+        self.obs.date = ephem.Date(now)
         rajnow, decjnow = self.obs.radec_of(self.telescope.azm * 2 * pi, self.telescope.alt * 2 * pi)
         
+        self.ra_samples.append(float(rajnow))
+        self.dec_samples.append(float(decjnow))
+        self.time_samples.append(now)
+
         # Calculate sky velocities
         v_ra = 0.0
         v_dec = 0.0
-        if self.prev_time is not None and self.prev_ra is not None and self.prev_dec is not None:
-            dt = (now - self.prev_time).total_seconds()
+        if len(self.time_samples) > 1:
+            dt = (self.time_samples[-1] - self.time_samples[0]).total_seconds()
             if dt > 0:
-                d_ra = float(rajnow) - self.prev_ra
+                d_ra = self.ra_samples[-1] - self.ra_samples[0]
                 if d_ra > pi: d_ra -= 2*pi
                 if d_ra < -pi: d_ra += 2*pi
-                
-                d_dec = float(decjnow) - self.prev_dec
-                
+                d_dec = self.dec_samples[-1] - self.dec_samples[0]
                 v_ra = (d_ra * (180.0/pi)) / dt # deg/s
                 v_dec = (d_dec * (180.0/pi)) / dt # deg/s
-        
-        self.prev_ra = float(rajnow)
-        self.prev_dec = float(decjnow)
-        self.prev_time = now
+                
+                if self.args.debug:
+                    print(f"DEBUG: dt={dt:.4f} RA={rajnow} Dec={decjnow} vRA={v_ra*3600:+.2f}\"/s vDec={v_dec*3600:+.2f}\"/s", file=sys.stderr)
 
         mode = "SLEWING" if self.telescope.slewing else ("GUIDING" if self.telescope.guiding else "IDLE")
         tracking = "ON" if self.telescope.guiding else "OFF"
@@ -339,6 +340,7 @@ async def main_async():
     parser = argparse.ArgumentParser(description='NexStar AUX Simulator (Textual)')
     sim_cfg = config.get("simulator", {})
     parser.add_argument('-t', '--text', action='store_true', help='Use text mode (headless)')
+    parser.add_argument('-d', '--debug', action='store_true', help='Enable debug logging to stderr')
     parser.add_argument('-p', '--port', type=int, default=sim_cfg.get("aux_port", 2000), help='AUX port')
     parser.add_argument('-s', '--stellarium', type=int, default=sim_cfg.get("stellarium_port", 10001), help='Stellarium port')
     args = parser.parse_args()
@@ -352,7 +354,6 @@ async def main_async():
 
     telescope = NexStarScope(stdscr=None, tui=False)
 
-    # background tasks
     asyncio.create_task(broadcast(sport=args.port))
     asyncio.create_task(timer(0.1, telescope))
     asyncio.create_task(report_scope_pos(0.1, telescope, obs))
@@ -364,8 +365,29 @@ async def main_async():
 
     if args.text:
         print(f"Simulator running in headless mode on port {args.port}")
+        ra_samples = deque(maxlen=10)
+        dec_samples = deque(maxlen=10)
+        time_samples = deque(maxlen=10)
         try:
-            while True: await asyncio.sleep(3600)
+            while True:
+                if args.debug:
+                    now = datetime.now(timezone.utc)
+                    obs.date = ephem.Date(now)
+                    rajnow, decjnow = obs.radec_of(telescope.azm * 2 * pi, telescope.alt * 2 * pi)
+                    ra_samples.append(float(rajnow))
+                    dec_samples.append(float(decjnow))
+                    time_samples.append(now)
+                    if len(time_samples) > 1:
+                        dt = (time_samples[-1] - time_samples[0]).total_seconds()
+                        if dt > 0:
+                            d_ra = ra_samples[-1] - ra_samples[0]
+                            if d_ra > pi: d_ra -= 2*pi
+                            if d_ra < -pi: d_ra += 2*pi
+                            d_dec = dec_samples[-1] - dec_samples[0]
+                            v_ra = (d_ra * (180.0/pi)) / dt
+                            v_dec = (d_dec * (180.0/pi)) / dt
+                            print(f"DEBUG: dt={dt:.4f} RA={rajnow} Dec={decjnow} vRA={v_ra*3600:+.2f}\"/s vDec={v_dec*3600:+.2f}\"/s", file=sys.stderr)
+                await asyncio.sleep(0.1)
         except asyncio.CancelledError: pass
     else:
         app = SimulatorApp(telescope, obs, args)

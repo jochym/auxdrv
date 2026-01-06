@@ -2,6 +2,16 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.5.2] - 2026-01-06
+
+### Added
+- Tryb debugowania (`-d` / `--debug`) w symulatorze, raportujący parametry pracy na `stderr`.
+- Implementacja okna przesuwnego (sliding window) dla obliczeń prędkości nieba (vRA, vDec) w celu eliminacji szumów numerycznych.
+
+### Fixed
+- Naprawiono oscylacje wyświetlanych prędkości vRA/vDec w interfejsie TUI.
+- Poprawiono stabilność obliczeń prędkości w trybie headless.
+
 ## [0.5.1] - 2026-01-06
 
 ### Added
