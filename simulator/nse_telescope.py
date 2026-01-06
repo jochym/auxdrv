@@ -155,8 +155,8 @@ class NexStarScope:
         self.goto = False
         self.alt_guiderate = 0.0
         self.azm_guiderate = 0.0
-        self.alt_maxrate = 18000 # 5 deg/s
-        self.azm_maxrate = 18000
+        self.alt_maxrate = 15000 # 15 deg/s
+        self.azm_maxrate = 15000
         self.use_maxrate = False
         self.cmd_log = deque(maxlen=30)
         self.msg_log = deque(maxlen=10)
