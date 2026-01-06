@@ -293,7 +293,7 @@ class SimulatorApp(App):
         self.log_sys(f"Location: {obs_cfg.get('name', 'Beblo')}")
 
     def update_stats(self) -> None:
-        alt_str = repr_angle(self.telescope.alt)
+        alt_str = repr_angle(self.telescope.alt, signed=True)
         azm_str = repr_angle(self.telescope.azm)
 
         # Physical velocities (deg/s)

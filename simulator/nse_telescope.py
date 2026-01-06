@@ -117,14 +117,28 @@ def f2dms(f: float):
     return dd, mm, ss
 
 
-def repr_angle(a: float) -> str:
+def repr_angle(a: float, signed: bool = False) -> str:
     """Returns a string representation of an angle in DMS format."""
-    return "%03d°%02d'%04.1f\"" % f2dms(a)
+    deg = a * 360.0
+    if signed:
+        if deg > 180:
+            deg -= 360.0
+        elif deg < -180:
+            deg += 360.0
+    else:
+        deg = deg % 360.0
+
+    sign = "-" if deg < 0 else " "
+    d = abs(deg)
+    dd = int(d)
+    mm = int((d - dd) * 60)
+    ss = (d - dd - mm / 60) * 3600
+    return "%s%03d°%02d'%04.1f\"" % (sign if signed else "", dd, mm, ss)
 
 
 def pack_int3(f: float) -> bytes:
     """Packs a float [0,1] into 3 bytes big-endian (NexStar format)."""
-    return struct.pack("!i", int(f * (2**24)))[1:]
+    return struct.pack("!i", int((f % 1.0) * (2**24)))[1:]
 
 
 def unpack_int3(d: bytes) -> float:
@@ -300,6 +314,9 @@ class NexStarScope:
         r = (self.alt_maxrate if rcv == 0x11 else self.azm_maxrate) / (360e3)
         a = unpack_int3(data)
         if rcv == 0x11:
+            # For Altitude, treat values > 0.5 as negative
+            if a > 0.5:
+                a -= 1.0
             self.trg_alt = a
             self.alt_rate = r if a > self.alt else -r
         else:
@@ -316,6 +333,8 @@ class NexStarScope:
         """Sets the internal MC position (Sync)."""
         a = unpack_int3(data)
         if rcv == 0x11:
+            if a > 0.5:
+                a -= 1.0
             self.alt = self.trg_alt = a
         else:
             self.azm = self.trg_azm = a % 1.0
@@ -352,6 +371,8 @@ class NexStarScope:
         r = 5.0 / 360  # 5 deg/s
         a = unpack_int3(data)
         if rcv == 0x11:
+            if a > 0.5:
+                a -= 1.0
             self.trg_alt = a
             self.alt_rate = r if a > self.alt else -r
         else:
@@ -490,13 +511,13 @@ class NexStarScope:
 
         self.pos_w.clear()
         self.pos_w.border()
-        self.pos_w.addstr(1, 3, "Alt: " + repr_angle(self.alt))
+        self.pos_w.addstr(1, 3, "Alt: " + repr_angle(self.alt, signed=True))
         self.pos_w.addstr(2, 3, "Azm: " + repr_angle(self.azm))
         self.pos_w.refresh()
 
         self.trg_w.clear()
         self.trg_w.border()
-        self.trg_w.addstr(1, 3, "Alt: " + repr_angle(self.trg_alt))
+        self.trg_w.addstr(1, 3, "Alt: " + repr_angle(self.trg_alt, signed=True))
         self.trg_w.addstr(2, 3, "Azm: " + repr_angle(self.trg_azm))
         self.trg_w.refresh()
 
@@ -524,12 +545,9 @@ class NexStarScope:
         maxrate = 20 / 360  # Increased maxrate for faster testing
 
         # Update Altitude with limit enforcement
-        alt_deg = self.alt * 360.0
-        if alt_deg > 180:
-            alt_deg -= 360.0
-        alt_deg += (self.alt_rate + self.alt_guiderate) * 360.0 * interval
-        alt_deg = max(self.alt_min * 360.0, min(self.alt_max * 360.0, alt_deg))
-        self.alt = (alt_deg % 360.0) / 360.0
+        self.alt += (self.alt_rate + self.alt_guiderate) * interval
+        # Limit Alt to configured range
+        self.alt = max(self.alt_min, min(self.alt_max, self.alt))
 
         # Update Azimuth (wraps around)
         self.azm = (self.azm + (self.azm_rate + self.azm_guiderate) * interval) % 1.0
