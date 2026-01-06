@@ -349,7 +349,7 @@ class NexStarScope:
         self.last_cmd = "GOTO_SLOW"
         self.slewing = self.goto = True
         self.guiding = False
-        r = 0.5 / 360  # 0.5 deg/s
+        r = 5.0 / 360  # 5 deg/s
         a = unpack_int3(data)
         if rcv == 0x11:
             self.trg_alt = a
