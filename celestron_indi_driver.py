@@ -210,8 +210,15 @@ class CelestronAUXDriver(IPyDriver):
             self.observer.date = ephem.now()
         else:
             self.observer.date = ephem.now() + time_offset / 86400.0
+        
+        # Ensure we use JNow (Equinox of Date)
+        self.observer.epoch = self.observer.date
+        
+        # Ensure we use JNow (Equinox of Date)
+        self.observer.epoch = self.observer.date
 
     async def rxevent(self, event):
+
         """Main event handler for INDI property updates."""
         if event.vectorname == "CONNECTION":
             await self.handle_connection(event)

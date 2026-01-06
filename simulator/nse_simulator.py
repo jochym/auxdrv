@@ -140,6 +140,7 @@ def handle_stellarium_cmd(tel, d):
 def make_stellarium_status(tel, obs):
     """Generates Stellarium status packet (Position report)."""
     obs.date = ephem.now()
+    obs.epoch = obs.date # Use JNow
     rajnow, decjnow = obs.radec_of(tel.azm * 2 * pi, tel.alt * 2 * pi)
     
     msg = bytearray(24)
@@ -275,6 +276,7 @@ class SimulatorApp(App):
         
         now = datetime.now(timezone.utc)
         self.obs.date = ephem.Date(now)
+        self.obs.epoch = self.obs.date # Use JNow
         rajnow, decjnow = self.obs.radec_of(self.telescope.azm * 2 * pi, self.telescope.alt * 2 * pi)
         
         self.ra_samples.append(float(rajnow))
@@ -373,6 +375,7 @@ async def main_async():
                 if args.debug:
                     now = datetime.now(timezone.utc)
                     obs.date = ephem.Date(now)
+                    obs.epoch = obs.date # Use JNow
                     rajnow, decjnow = obs.radec_of(telescope.azm * 2 * pi, telescope.alt * 2 * pi)
                     ra_samples.append(float(rajnow))
                     dec_samples.append(float(decjnow))
