@@ -24,10 +24,11 @@
   - Implemented Cord Wrap Prevention
   - Added Focuser support
   - Added GPS module support
+  - Fixed linear Altitude axis and signed display in simulator.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Verification**: Running full functional test suite with optimized slew rates.
+- **Documentation**: Finalizing README and developer guides.
 
 ### Pending Tasks 📋
 1. Implement non-sidereal tracking (Satellites/Comets)

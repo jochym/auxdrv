@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-01-06
+
+### Fixed
+- Fixed **Altitude wrap-around bug** in simulator where negative altitudes were reported as large positive values (e.g., 337.5° instead of -22.5°).
+- Treated Altitude as a **linear axis** instead of a full circle to avoid incorrect movement directions in GoTo.
+- Added support for **signed angle representation** in simulator TUI for Altitude.
+- Normalized incoming motor controller coordinates to handle signed values correctly in driver logic.
+- All 17 automated tests (Functional, Safety, Math) verified passing.
+
 ## [0.6.0] - 2026-01-06
 
 ### Added
