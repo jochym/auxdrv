@@ -2,6 +2,22 @@
 
 Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
 
+## [0.5.0] - 2026-01-05
+
+### Added
+- Nowoczesny interfejs TUI symulatora oparty na bibliotece **Textual** (zastąpienie curses).
+- Zaawansowany **system wyrównania (Alignment)** oparty na transformacjach macierzowych 3x3.
+- Obsługa właściwości `TELESCOPE_ON_COORD_SET` (tryby SLEW, TRACK, SYNC).
+- Możliwość dodawania punktów wyrównania (max 3 gwiazdy) w celu korekcji błędów ustawienia montażu.
+- Nowy zestaw testów: `test_10_alignment_3star` oraz testy matematyki wyrównania (`tests/test_alignment_math.py`).
+- Obsługa zmiennej środowiskowej `EXTERNAL_SIM` w testach funkcjonalnych.
+
+### Changed
+- Pełne udokumentowanie kodu (Docstrings w standardzie Google Style) dla wszystkich modułów.
+- Usunięcie ostrzeżeń o przestarzałych funkcjach (`utcnow`, `get_event_loop`).
+- Poprawa logiki `Park` – obsługa "zawijania" licznika kroków (wrap-around).
+- Zmiana formatu konfiguracji na YAML (`config.yaml`).
+
 ## [0.4.0] - 2026-01-05
 
 ### Added

@@ -10,9 +10,16 @@ from celestron_indi_driver import CelestronAUXDriver, AUXTargets
 class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
     sim_proc = None
     sim_port = 2001 
+    external_sim = False # Set to True to use an already running simulator
 
     @classmethod
     def setUpClass(cls):
+        # Allow override via environment variable
+        if os.environ.get('EXTERNAL_SIM'):
+            cls.external_sim = True
+            cls.sim_port = int(os.environ.get('SIM_PORT', 2000))
+            return
+
         # Start simulator and capture output (unbuffered)
         cls.sim_log = open('test_sim.log', 'w')
         cls.sim_proc = subprocess.Popen(
@@ -24,6 +31,8 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        if cls.external_sim:
+            return
         if cls.sim_proc:
             cls.sim_proc.terminate()
             cls.sim_proc.wait()
@@ -183,6 +192,65 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(1)
             
         self.assertTrue(reached, f"RA/Dec target not reached. Final: RA={self.driver.ra.membervalue}, DEC={self.driver.dec.membervalue}")
+
+    async def test_10_alignment_3star(self):
+        """Test 3-star alignment system."""
+        # 1. Clear existing alignment
+        self.driver.clear_align.membervalue = "On"
+        await self.driver.handle_clear_alignment(None)
+        self.assertEqual(len(self.driver._align_model.points), 0)
+        
+        # 2. Add 3 alignment points
+        points = [
+            (2.0, 45.0), # RA, Dec
+            (14.0, 20.0),
+            (20.0, -10.0)
+        ]
+        
+        # Turn on Sidereal Tracking to keep RA/Dec fixed in Alt/Az
+        self.driver.track_sidereal.membervalue = "On"
+        self.driver.track_none.membervalue = "Off"
+        await self.driver.handle_track_mode(None)
+        
+        # Set to SYNC mode
+        self.driver.set_slew.membervalue = "Off"
+        self.driver.set_sync.membervalue = "On"
+        
+        for ra, dec in points:
+            # Move to target (manually using goto_position or handle_equatorial_goto in SLEW mode)
+            # To simulate a user centering a star, we'll just force the position
+            self.driver.set_slew.membervalue = "On"
+            self.driver.set_sync.membervalue = "Off"
+            self.driver.ra.membervalue = ra
+            self.driver.dec.membervalue = dec
+            await self.driver.handle_equatorial_goto(None)
+            
+            # Now "Center" it and Sync
+            self.driver.set_slew.membervalue = "Off"
+            self.driver.set_sync.membervalue = "On"
+            self.driver.ra.membervalue = ra # User confirms these are RA/Dec of currently centered star
+            self.driver.dec.membervalue = dec
+            await self.driver.handle_equatorial_goto(None)
+            
+        self.assertEqual(len(self.driver._align_model.points), 3)
+        self.assertIsNotNone(self.driver._align_model.matrix)
+        
+        # 3. Test GoTo accuracy with alignment
+        self.driver.set_slew.membervalue = "On"
+        self.driver.set_sync.membervalue = "Off"
+        
+        target_ra, target_dec = 10.0, 10.0
+        self.driver.ra.membervalue = target_ra
+        self.driver.dec.membervalue = target_dec
+        await self.driver.handle_equatorial_goto(None)
+        
+        await self.driver.read_mount_position()
+        
+        ra = float(self.driver.ra.membervalue)
+        dec = float(self.driver.dec.membervalue)
+        
+        self.assertAlmostEqual(ra, target_ra, delta=0.1)
+        self.assertAlmostEqual(dec, target_dec, delta=0.5)
 
     async def test_7_approach_logic(self):
         """Test anti-backlash approach logic (two-stage movement)."""

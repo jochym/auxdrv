@@ -19,6 +19,7 @@ import ephem
 from datetime import datetime, timezone
 import yaml
 import os
+import math
 
 # Import AUX protocol implementation
 from celestron_aux_driver import (
@@ -26,6 +27,7 @@ from celestron_aux_driver import (
     AUXCommunicator, pack_int3_steps, unpack_int3_steps,
     STEPS_PER_REVOLUTION
 )
+from alignment import AlignmentModel, vector_from_radec, vector_from_altaz, vector_to_radec, vector_to_altaz
 
 # Load configuration
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
@@ -55,7 +57,7 @@ class CelestronAUXDriver(IPyDriver):
     INDI Driver for Celestron mounts.
     
     Manages INDI properties, hardware communication via AUX bus, 
-    and coordinate transformations.
+    and coordinate transformations with N-point alignment support.
     """
     def __init__(self, driver_name: str = "Celestron AUX"):
         # 1. Define INDI properties
@@ -69,7 +71,8 @@ class CelestronAUXDriver(IPyDriver):
             self.guide_rate_vector, self.sync_vector, self.park_vector, self.unpark_vector,
             self.location_vector, self.equatorial_vector,
             self.approach_mode_vector, self.approach_offset_vector,
-            self.track_mode_vector
+            self.track_mode_vector, self.align_vector, self.clear_align_vector,
+            self.coord_set_vector
         ])
 
         super().__init__(self.device)
@@ -77,9 +80,14 @@ class CelestronAUXDriver(IPyDriver):
         self.current_azm_steps = 0
         self.current_alt_steps = 0
         self._tracking_task = None
+        self._align_model = AlignmentModel()
+        
+        # Alignment data: list of (RA, Dec, AzmSteps, AltSteps)
+        self._alignment_points = []
         
         # 3. ephem Observer for RA/Dec <-> Alt/Az transformations
         self.observer = ephem.Observer()
+        self.observer.pressure = 0
         self.update_observer()
 
     def _init_properties(self):
@@ -175,16 +183,33 @@ class CelestronAUXDriver(IPyDriver):
         self.track_mode_vector = SwitchVector("TELESCOPE_TRACK_MODE", "Tracking Mode", "Main", "rw", "OneOfMany", "Idle",
                                             [self.track_none, self.track_sidereal, self.track_solar, self.track_lunar])
 
+        # Coordination Set Mode (Slew, Track, Sync)
+        self.set_slew = SwitchMember("SLEW", "Slew", "On")
+        self.set_track = SwitchMember("TRACK", "Track", "Off")
+        self.set_sync = SwitchMember("SYNC", "Sync", "Off")
+        self.coord_set_vector = SwitchVector("TELESCOPE_ON_COORD_SET", "Coord Set Mode", "Main", "rw", "OneOfMany", "Idle",
+                                           [self.set_slew, self.set_track, self.set_sync])
+
+        # Alignment System
+        self.align_star1 = TextMember("STAR1", "Star 1", "None")
+        self.align_star2 = TextMember("STAR2", "Star 2", "None")
+        self.align_star3 = TextMember("STAR3", "Star 3", "None")
+        self.align_vector = TextVector("ALIGNMENT_INFO", "Alignment Stars", "Alignment", "ro", "Idle", 
+                                     [self.align_star1, self.align_star2, self.align_star3])
+        
+        self.clear_align = SwitchMember("CLEAR", "Clear Alignment", "Off")
+        self.clear_align_vector = SwitchVector("CLEAR_ALIGNMENT", "Clear Alignment", "Alignment", "rw", "AtMostOne", "Idle", [self.clear_align])
+
     def update_observer(self, time_offset: float = 0):
         """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
+        # Use ephem.now() for better consistency with simulator
         if time_offset == 0:
-            self.observer.date = datetime.now(timezone.utc).replace(tzinfo=None)
+            self.observer.date = ephem.now()
         else:
-            from datetime import timedelta
-            self.observer.date = (datetime.now(timezone.utc) + timedelta(seconds=time_offset)).replace(tzinfo=None)
+            self.observer.date = ephem.now() + time_offset / 86400.0
 
     async def rxevent(self, event):
         """Main event handler for INDI property updates."""
@@ -205,8 +230,6 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_motion_we(event)
         elif event.vectorname == "TELESCOPE_ABSOLUTE_COORD":
             await self.handle_goto(event)
-        elif event.vectorname == "TELESCOPE_SYNC":
-            await self.handle_sync(event)
         elif event.vectorname == "TELESCOPE_PARK":
             await self.handle_park(event)
         elif event.vectorname == "TELESCOPE_UNPARK":
@@ -227,6 +250,11 @@ class CelestronAUXDriver(IPyDriver):
             await self.approach_offset_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_TRACK_MODE":
             await self.handle_track_mode(event)
+        elif event.vectorname == "TELESCOPE_ON_COORD_SET":
+            self.coord_set_vector.update(event.root)
+            await self.coord_set_vector.send_setVector(state="Ok")
+        elif event.vectorname == "CLEAR_ALIGNMENT":
+            await self.handle_clear_alignment(event)
 
     async def handle_connection(self, event):
         """Handles CONNECT/DISCONNECT switches."""
@@ -361,18 +389,11 @@ class CelestronAUXDriver(IPyDriver):
     async def goto_position(self, target_azm, target_alt, ra=None, dec=None):
         """
         Executes a GoTo movement with optional anti-backlash approach.
-        
-        Args:
-            target_azm (int): Target azimuth steps.
-            target_alt (int): Target altitude steps.
-            ra (float, optional): Target RA for tracking-based approach.
-            dec (float, optional): Target Dec for tracking-based approach.
         """
         approach_mode = "DISABLED"
         if self.approach_fixed.membervalue == "On": approach_mode = "FIXED"
         elif self.approach_tracking.membervalue == "On": approach_mode = "TRACKING"
         
-        # 1. Determine approach direction (positive by default)
         azm_sign = 1
         alt_sign = 1
         
@@ -382,7 +403,6 @@ class CelestronAUXDriver(IPyDriver):
             alt_sign = 1 if rate_alt >= 0 else -1
 
         if approach_mode != "DISABLED":
-            # 2. Stage 1: Fast GoTo to intermediate position
             off_azm = int(self.approach_azm_offset.membervalue)
             off_alt = int(self.approach_alt_offset.membervalue)
             
@@ -394,14 +414,11 @@ class CelestronAUXDriver(IPyDriver):
                 self._do_slew(AUXTargets.ALT, inter_alt, fast=True)
             )
             
-            # Wait for both to finish
             await asyncio.gather(
                 self._wait_for_slew(AUXTargets.AZM),
                 self._wait_for_slew(AUXTargets.ALT)
             )
 
-        # 3. Final Stage: GoTo to final target
-        # Use SLOW movement for precision if approach was used
         fast_final = (approach_mode == "DISABLED")
         s1 = await self._do_slew(AUXTargets.AZM, target_azm, fast=fast_final)
         s2 = await self._do_slew(AUXTargets.ALT, target_alt, fast=fast_final)
@@ -422,22 +439,75 @@ class CelestronAUXDriver(IPyDriver):
         await self.absolute_coord_vector.send_setVector(state=state)
 
     async def slew_to(self, axis, steps, fast=True):
-        """Sends a position-based GoTo command to a motor axis (DEPRECATED: use goto_position)."""
+        """Sends a position-based GoTo command to a motor axis."""
         return await self._do_slew(axis, steps, fast)
 
     async def handle_sync(self, event):
-        """Sets the current hardware position to match driver's internal state."""
+        """Adds current position as an alignment point or performs simple sync."""
         if event and event.root:
             self.sync_vector.update(event.root)
+        
         if self.sync_switch.membervalue == "On":
             await self.sync_vector.send_setVector(state="Busy")
+            
+            # Record current point for alignment
+            ra_val = float(self.ra.membervalue)
+            dec_val = float(self.dec.membervalue)
+            
+            # 1. Convert RA/Dec to ideal Alt/Az (using current time/location)
+            self.update_observer()
+            body = ephem.FixedBody()
+            body._ra = math.radians(ra_val * 15.0)
+            body._dec = math.radians(dec_val)
+            body.compute(self.observer)
+            
+            ideal_az_deg = math.degrees(float(body.az))
+            ideal_alt_deg = math.degrees(float(body.alt))
+            
+            # 2. Get current raw Alt/Az from encoders
+            raw_az_deg = (self.current_azm_steps / STEPS_PER_REVOLUTION) * 360.0
+            raw_alt_deg = (self.current_alt_steps / STEPS_PER_REVOLUTION) * 360.0
+            
+            # 3. Add vectors to alignment model
+            sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
+            mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
+            self._align_model.add_point(sky_vec, mount_vec)
+            
+            # Add to list for GUI info
+            self._alignment_points.append({
+                'ra': ra_val, 'dec': dec_val,
+                'azm': self.current_azm_steps, 'alt': self.current_alt_steps,
+                'time': datetime.now(timezone.utc)
+            })
+            if len(self._alignment_points) > 3:
+                self._alignment_points.pop(0)
+            
+            # Update info
+            stars = [self.align_star1, self.align_star2, self.align_star3]
+            for i, p in enumerate(self._alignment_points):
+                stars[i].membervalue = f"RA:{p['ra']:.2f} Dec:{p['dec']:.2f}"
+            await self.align_vector.send_setVector()
+
+            # Physical Sync (sets MC position to current state - effectively a 1-point align in hardware)
             cmd_azm = AUXCommand(AUXCommands.MC_SET_POSITION, AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(self.current_azm_steps))
             cmd_alt = AUXCommand(AUXCommands.MC_SET_POSITION, AUXTargets.APP, AUXTargets.ALT, pack_int3_steps(self.current_alt_steps))
             s1 = await self.communicator.send_command(cmd_azm)
             s2 = await self.communicator.send_command(cmd_alt)
-            state = "Ok" if s1 and s2 else "Alert"
+            
             self.sync_switch.membervalue = "Off"
-            await self.sync_vector.send_setVector(state=state)
+            await self.sync_vector.send_setVector(state="Ok" if s1 and s2 else "Alert")
+
+    async def handle_clear_alignment(self, event):
+        """Clears all stored alignment points."""
+        if event and event.root:
+            self.clear_align_vector.update(event.root)
+        if self.clear_align.membervalue == "On":
+            self._alignment_points = []
+            self._align_model.clear()
+            self.align_star1.membervalue = self.align_star2.membervalue = self.align_star3.membervalue = "None"
+            await self.align_vector.send_setVector()
+            self.clear_align.membervalue = "Off"
+            await self.clear_align_vector.send_setVector(state="Ok")
 
     async def handle_park(self, event):
         """Moves the mount to the park position (0,0 steps)."""
@@ -465,23 +535,65 @@ class CelestronAUXDriver(IPyDriver):
             await self.unpark_vector.send_setVector(state="Ok")
 
     async def handle_equatorial_goto(self, event):
-        """Handles GoTo command using RA/Dec coordinates."""
+        """Handles GoTo or Sync command using RA/Dec coordinates."""
         if event and event.root:
             self.equatorial_vector.update(event.root)
-        await self.equatorial_vector.send_setVector(state="Busy")
         
-        ra_val = float(self.ra.membervalue)
-        dec_val = float(self.dec.membervalue)
-        
-        azm_steps, alt_steps = await self.equatorial_to_steps(ra_val, dec_val)
-        
-        success = await self.goto_position(azm_steps, alt_steps, ra=ra_val, dec=dec_val)
-        
-        state = "Ok" if success else "Alert"
-        await self.equatorial_vector.send_setVector(state=state)
+        target_ra = float(self.ra.membervalue)
+        target_dec = float(self.dec.membervalue)
+
+        if self.set_sync.membervalue == "On":
+            # Perform SYNC
+            await self.equatorial_vector.send_setVector(state="Busy")
+            
+            # Ensure we have fresh encoder data
+            await self.read_mount_position()
+            
+            # 1. Convert Target RA/Dec to ideal Alt/Az
+            self.update_observer()
+            body = ephem.FixedBody()
+            body._ra = math.radians(target_ra * 15.0)
+            body._dec = math.radians(target_dec)
+            body.compute(self.observer)
+            
+            ideal_az_deg = math.degrees(float(body.az))
+            ideal_alt_deg = math.degrees(float(body.alt))
+            
+            # 2. Get current raw Alt/Az from encoders
+            raw_az_deg = (self.current_azm_steps / STEPS_PER_REVOLUTION) * 360.0
+            raw_alt_deg = (self.current_alt_steps / STEPS_PER_REVOLUTION) * 360.0
+            
+            # 3. Add vectors to alignment model
+            sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
+            mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
+            self._align_model.add_point(sky_vec, mount_vec)
+            
+            # print(f"SYNC: RA={ra_val} Dec={dec_val} -> IdealAz={ideal_az_deg} IdealAlt={ideal_alt_deg} RawAz={raw_az_deg} RawAlt={raw_alt_deg}")
+            
+            # Update info
+            stars = [self.align_star1, self.align_star2, self.align_star3]
+            for i, p in enumerate(self._align_model.points):
+                # Back-calculate RA/Dec for the star (approx)
+                s_ra, s_dec = vector_to_radec(self._align_model.points[i][0]) # This is simplified
+                stars[i].membervalue = f"RA:{s_ra:.2f} Dec:{s_dec:.2f}"
+            await self.align_vector.send_setVector()
+
+            # Physical Sync (sets MC position to current state)
+            cmd_azm = AUXCommand(AUXCommands.MC_SET_POSITION, AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(self.current_azm_steps))
+            cmd_alt = AUXCommand(AUXCommands.MC_SET_POSITION, AUXTargets.APP, AUXTargets.ALT, pack_int3_steps(self.current_alt_steps))
+            s1 = await self.communicator.send_command(cmd_azm)
+            s2 = await self.communicator.send_command(cmd_alt)
+            
+            await self.equatorial_vector.send_setVector(state="Ok" if s1 and s2 else "Alert")
+        else:
+            # Perform GOTO
+            await self.equatorial_vector.send_setVector(state="Busy")
+            azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
+            success = await self.goto_position(azm_steps, alt_steps, ra=target_ra, dec=target_dec)
+            await self.equatorial_vector.send_setVector(state="Ok" if success else "Alert")
 
     async def equatorial_to_steps(self, ra_hours, dec_deg, time_offset: float = 0):
-        """Converts RA/Dec to motor encoder steps using current observer state."""
+        """Converts RA/Dec to motor encoder steps using current observer state and alignment."""
         import math
         ra_rad = (ra_hours / 24.0) * 2 * math.pi
         dec_rad = (dec_deg / 360.0) * 2 * math.pi
@@ -493,18 +605,31 @@ class CelestronAUXDriver(IPyDriver):
         self.update_observer(time_offset=time_offset)
         body.compute(self.observer)
         
-        azm_steps = int((float(body.az) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
-        alt_steps = int((float(body.alt) / (2 * math.pi)) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
+        ideal_az_deg = math.degrees(float(body.az))
+        ideal_alt_deg = math.degrees(float(body.alt))
+        
+        # Apply Alignment Transform
+        sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
+        mount_vec = self._align_model.transform_to_mount(sky_vec)
+        real_az_deg, real_alt_deg = vector_to_altaz(mount_vec)
+        
+        azm_steps = int((real_az_deg / 360.0) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
+        alt_steps = int((real_alt_deg / 360.0) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
         return azm_steps, alt_steps
 
     async def steps_to_equatorial(self, azm_steps, alt_steps):
-        """Converts motor encoder steps to RA/Dec using current observer state."""
+        """Converts motor encoder steps to RA/Dec using current observer state and alignment."""
         import math
-        az_rad = (azm_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
-        alt_rad = (alt_steps / STEPS_PER_REVOLUTION) * 2 * math.pi
+        real_az_deg = (azm_steps / STEPS_PER_REVOLUTION) * 360.0
+        real_alt_deg = (alt_steps / STEPS_PER_REVOLUTION) * 360.0
+        
+        # Apply Inverse Alignment Transform
+        mount_vec = vector_from_altaz(real_az_deg, real_alt_deg)
+        sky_vec = self._align_model.transform_to_sky(mount_vec)
+        ideal_az_deg, ideal_alt_deg = vector_to_altaz(sky_vec)
         
         self.update_observer()
-        ra_rad, dec_rad = self.observer.radec_of(az_rad, alt_rad)
+        ra_rad, dec_rad = self.observer.radec_of(math.radians(ideal_az_deg), math.radians(ideal_alt_deg))
         
         ra_hours = (ra_rad / (2 * math.pi)) * 24
         dec_deg = (dec_rad / (2 * math.pi)) * 360
@@ -541,7 +666,6 @@ class CelestronAUXDriver(IPyDriver):
             if self._tracking_task:
                 self._tracking_task.cancel()
                 self._tracking_task = None
-            # Stop motors
             if self.communicator and self.communicator.connected:
                 await self.slew_by_rate(AUXTargets.AZM, 0, 1)
                 await self.slew_by_rate(AUXTargets.ALT, 0, 1)
@@ -557,8 +681,6 @@ class CelestronAUXDriver(IPyDriver):
     async def _tracking_loop(self):
         """
         Background loop for object tracking using 2nd order prediction.
-        
-        Algorithm: w(t) = (theta(t+dt) - theta(t-dt)) / (2*dt)
         """
         try:
             while True:
@@ -566,12 +688,10 @@ class CelestronAUXDriver(IPyDriver):
                     await asyncio.sleep(1)
                     continue
 
-                # 1. Get current target coordinates
                 ra = float(self.ra.membervalue)
                 dec = float(self.dec.membervalue)
                 
-                # 2. Calculate rates using 2nd order differential
-                dt = 1.0 # 1 second delta
+                dt = 1.0 
                 s_plus_azm, s_plus_alt = await self.equatorial_to_steps(ra, dec, time_offset=dt)
                 s_minus_azm, s_minus_alt = await self.equatorial_to_steps(ra, dec, time_offset=-dt)
                 
@@ -584,13 +704,12 @@ class CelestronAUXDriver(IPyDriver):
                 rate_azm = diff_steps(s_plus_azm, s_minus_azm) / (2.0 * dt)
                 rate_alt = diff_steps(s_plus_alt, s_minus_alt) / (2.0 * dt)
                 
-                # 3. Convert steps/sec to AUX Guide Rate payload
-                # payload = rate_steps_sec * (1024 * 360 * 3600 / 2^24) / 3600
-                factor = (1024.0 * 360.0) / STEPS_PER_REVOLUTION
+                # rate_arcsec_sec = rate_steps_sec * (360 * 3600) / STEPS_PER_REVOLUTION
+                # payload = rate_arcsec_sec * 1024
+                factor = (360.0 * 3600.0 * 1024.0) / STEPS_PER_REVOLUTION
                 val_azm = int(abs(rate_azm) * factor)
                 val_alt = int(abs(rate_alt) * factor)
                 
-                # 4. Send commands
                 cmd_azm = AUXCommand(
                     AUXCommands.MC_SET_POS_GUIDERATE if rate_azm >= 0 else AUXCommands.MC_SET_NEG_GUIDERATE,
                     AUXTargets.APP, AUXTargets.AZM, pack_int3_steps(min(val_azm, 0xFFFF))
