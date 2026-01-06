@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-06
-- **Current Phase**: Phase 6 - Safety & Accessories
+- **Current Phase**: Phase 7 - Moving Objects Support
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -26,9 +26,11 @@
   - Added GPS module support
   - Fixed linear Altitude axis and signed display in simulator.
 - **I18n**: Project translated to English for public release.
+- **Documentation**: README and developer guides updated.
 
 ### In Progress 🔄
-- **Documentation**: Finalizing README and developer guides.
+- **Phase 7**: Moving Objects Support
+  - Researching TLE integration and non-sidereal tracking algorithms.
 
 ### Pending Tasks 📋
 1. Implement non-sidereal tracking (Satellites/Comets)
