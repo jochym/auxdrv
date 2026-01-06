@@ -1,7 +1,7 @@
 """
 NexStar Telescope Emulation Core
 
-This module provides the `NexStarScope` class which emulates the behavior 
+This module provides the `NexStarScope` class which emulates the behavior
 of a Celestron mount's Motor Controllers (MC) and other devices on the AUX bus.
 It handles motion physics, command processing, and state management.
 """
@@ -15,54 +15,54 @@ import binascii
 
 # ID tables from Celestron AUX Protocol
 targets = {
-    'ANY': 0x00,
-    'MB' : 0x01,  # Main Board
-    'HC' : 0x04,  # Hand Controller
-    'UKN1': 0x05,
-    'HC+': 0x0d,
-    'AZM': 0x10,  # Azimuth / RA Motor
-    'ALT': 0x11,  # Altitude / Dec Motor
-    'APP': 0x20,  # Software Application
-    'GPS': 0xb0,
-    'UKN2': 0xb4,
-    'WiFi': 0xb5,
-    'BAT': 0xb6,
-    'CHG': 0xb7,
-    'LIGHT': 0xbf
+    "ANY": 0x00,
+    "MB": 0x01,  # Main Board
+    "HC": 0x04,  # Hand Controller
+    "UKN1": 0x05,
+    "HC+": 0x0D,
+    "AZM": 0x10,  # Azimuth / RA Motor
+    "ALT": 0x11,  # Altitude / Dec Motor
+    "APP": 0x20,  # Software Application
+    "GPS": 0xB0,
+    "UKN2": 0xB4,
+    "WiFi": 0xB5,
+    "BAT": 0xB6,
+    "CHG": 0xB7,
+    "LIGHT": 0xBF,
 }
 trg_names = {value: key for key, value in targets.items()}
 
 commands = {
-    'MC_GET_POSITION': 0x01,
-    'MC_GOTO_FAST': 0x02,
-    'MC_SET_POSITION': 0x04,
-    'MC_GET_MODEL': 0x05,
-    'MC_SET_POS_GUIDERATE': 0x06,
-    'MC_SET_NEG_GUIDERATE': 0x07,
-    'MC_LEVEL_START': 0x0b,
-    'MC_SET_POS_BACKLASH': 0x10,
-    'MC_SET_NEG_BACKLASH': 0x11,
-    'MC_SLEW_DONE': 0x13,
-    'MC_GOTO_SLOW': 0x17,
-    'MC_AT_INDEX': 0x18,
-    'MC_SEEK_INDEX': 0x19,
-    'MC_SET_MAXRATE': 0x20,
-    'MC_GET_MAXRATE': 0x21,
-    'MC_ENABLE_MAXRATE': 0x22,
-    'MC_MAXRATE_ENABLED': 0x23,
-    'MC_MOVE_POS': 0x24,
-    'MC_MOVE_NEG': 0x25,
-    'MC_ENABLE_CORDWRAP': 0x38,
-    'MC_DISABLE_CORDWRAP': 0x39,
-    'MC_SET_CORDWRAP_POS': 0x3a,
-    'MC_POLL_CORDWRAP': 0x3b,
-    'MC_GET_CORDWRAP_POS': 0x3c,
-    'MC_GET_POS_BACKLASH': 0x40,
-    'MC_GET_NEG_BACKLASH': 0x41,
-    'MC_GET_AUTOGUIDE_RATE': 0x47,
-    'MC_GET_APPROACH': 0xfc,
-    'MC_SET_APPROACH': 0xfd,
-    'GET_VER': 0xfe,
+    "MC_GET_POSITION": 0x01,
+    "MC_GOTO_FAST": 0x02,
+    "MC_SET_POSITION": 0x04,
+    "MC_GET_MODEL": 0x05,
+    "MC_SET_POS_GUIDERATE": 0x06,
+    "MC_SET_NEG_GUIDERATE": 0x07,
+    "MC_LEVEL_START": 0x0B,
+    "MC_SET_POS_BACKLASH": 0x10,
+    "MC_SET_NEG_BACKLASH": 0x11,
+    "MC_SLEW_DONE": 0x13,
+    "MC_GOTO_SLOW": 0x17,
+    "MC_AT_INDEX": 0x18,
+    "MC_SEEK_INDEX": 0x19,
+    "MC_SET_MAXRATE": 0x20,
+    "MC_GET_MAXRATE": 0x21,
+    "MC_ENABLE_MAXRATE": 0x22,
+    "MC_MAXRATE_ENABLED": 0x23,
+    "MC_MOVE_POS": 0x24,
+    "MC_MOVE_NEG": 0x25,
+    "MC_ENABLE_CORDWRAP": 0x38,
+    "MC_DISABLE_CORDWRAP": 0x39,
+    "MC_SET_CORDWRAP_POS": 0x3A,
+    "MC_POLL_CORDWRAP": 0x3B,
+    "MC_GET_CORDWRAP_POS": 0x3C,
+    "MC_GET_POS_BACKLASH": 0x40,
+    "MC_GET_NEG_BACKLASH": 0x41,
+    "MC_GET_AUTOGUIDE_RATE": 0x47,
+    "MC_GET_APPROACH": 0xFC,
+    "MC_SET_APPROACH": 0xFD,
+    "GET_VER": 0xFE,
 }
 cmd_names = {value: key for key, value in commands.items()}
 
@@ -72,20 +72,22 @@ ACK_CMDS = [0x02, 0x04, 0x06, 0x24]
 # Slew rates mapping (index 0-9 to deg/sec)
 RATES = {
     0: 0.0,
-    1: 1/(360*60),
-    2: 2/(360*60),
-    3: 5/(360*60),
-    4: 15/(360*60),
-    5: 30/(360*60),
-    6: 1/360,
-    7: 2/360,
-    8: 5/360,
-    9: 10/360
+    1: 1 / (360 * 60),
+    2: 2 / (360 * 60),
+    3: 5 / (360 * 60),
+    4: 15 / (360 * 60),
+    5: 30 / (360 * 60),
+    6: 1 / 360,
+    7: 2 / 360,
+    8: 5 / 360,
+    9: 10 / 360,
 }
+
 
 def decode_command(cmd: bytes):
     """Decodes a raw AUX packet into its components."""
     return (cmd[3], cmd[1], cmd[2], cmd[0], cmd[4:-1], cmd[-1])
+
 
 def split_cmds(data: bytes):
     """Splits a stream of bytes into individual AUX packets based on start byte ';'."""
@@ -93,52 +95,60 @@ def split_cmds(data: bytes):
     b = 0
     while True:
         try:
-            p = data.index(b';', b)
-            length = abs(int(data[p+1]))
-            cmds.append(data[p+1:p+length+3])
+            p = data.index(b";", b)
+            length = abs(int(data[p + 1]))
+            cmds.append(data[p + 1 : p + length + 3])
             b = p + length + 3
         except (ValueError, IndexError):
-            return cmds    
+            return cmds
+
 
 def make_checksum(data: bytes) -> int:
     """Calculates 2's complement checksum for AUX packet."""
-    return ((~sum([c for c in bytes(data)]) + 1)) & 0xFF
+    return (~sum([c for c in bytes(data)]) + 1) & 0xFF
+
 
 def f2dms(f: float):
     """Converts fraction of rotation [0,1] to (Degrees, Minutes, Seconds)."""
     d = 360 * abs(f)
     dd = int(d)
-    mm = int((d-dd)*60)
-    ss = (d-dd-mm/60)*3600
+    mm = int((d - dd) * 60)
+    ss = (d - dd - mm / 60) * 3600
     return dd, mm, ss
+
 
 def repr_angle(a: float) -> str:
     """Returns a string representation of an angle in DMS format."""
-    return u'%03d°%02d\'%04.1f"' % f2dms(a)
+    return "%03d°%02d'%04.1f\"" % f2dms(a)
+
 
 def pack_int3(f: float) -> bytes:
     """Packs a float [0,1] into 3 bytes big-endian (NexStar format)."""
-    return struct.pack('!i', int(f * (2**24)))[1:]
+    return struct.pack("!i", int(f * (2**24)))[1:]
+
 
 def unpack_int3(d: bytes) -> float:
     """Unpacks 3 bytes into a float [0,1]."""
-    return struct.unpack('!i', b'\x00' + d[:3])[0] / 2**24
+    return struct.unpack("!i", b"\x00" + d[:3])[0] / 2**24
+
 
 def unpack_int2(d: bytes) -> int:
     """Unpacks 2 bytes into an integer."""
-    return struct.unpack('!i', b'\x00\x00' + d[:2])[0]
+    return struct.unpack("!i", b"\x00\x00" + d[:2])[0]
+
 
 class NexStarScope:
     """
     Simulated NexStar Telescope Mount.
-    
-    Handles physics of movement, command handlers for motor controllers, 
+
+    Handles physics of movement, command handlers for motor controllers,
     and optional TUI display.
     """
+
     __mcfw_ver = (7, 11, 5100 // 256, 5100 % 256)
     __hcfw_ver = (5, 28, 5300 // 256, 5300 % 256)
     __mbfw_ver = (1, 0, 0, 1)
-    
+
     def __init__(self, ALT=0.0, AZM=0.0, tui=True, stdscr=None):
         self.tui = tui
         self.alt = ALT
@@ -149,13 +159,13 @@ class NexStarScope:
         self.azm_rate = 0
         self.alt_approach = 0
         self.azm_approach = 0
-        self.last_cmd = ''
+        self.last_cmd = ""
         self.slewing = False
         self.guiding = False
         self.goto = False
         self.alt_guiderate = 0.0
         self.azm_guiderate = 0.0
-        self.alt_maxrate = 15000 # 15 deg/s
+        self.alt_maxrate = 15000  # 15 deg/s
         self.azm_maxrate = 15000
         self.use_maxrate = False
         self.cmd_log = deque(maxlen=30)
@@ -168,11 +178,17 @@ class NexStarScope:
         self.charge = False
         self.cordwrap = False
         self.cordwrap_pos = 0
-        
+        self.alt_min = -22.5 / 360.0  # Default limits for a typical mount
+        self.alt_max = 90.0 / 360.0
+        self.focus_pos = 100000
+        self.gps_lat = (50, 10, 56, 0)  # 50d 10' 56" N
+        self.gps_lon = (19, 47, 33, 0)  # 19d 47' 33" E
+        self.gps_linked = True
+
         self._other_handlers = {
             0x10: self.cmd_0x10,
             0x18: self.cmd_0x18,
-            0xfe: self.fw_version,
+            0xFE: self.fw_version,
         }
         self._mc_handlers = {
             0x01: self.get_position,
@@ -181,7 +197,7 @@ class NexStarScope:
             0x05: self.get_model,
             0x06: self.set_pos_guiderate,
             0x07: self.set_neg_guiderate,
-            0x0b: self.level_start,
+            0x0B: self.level_start,
             0x13: self.slew_done,
             0x17: self.goto_slow,
             0x18: self.at_index,
@@ -194,58 +210,82 @@ class NexStarScope:
             0x25: self.move_neg,
             0x38: self.enable_cordwrap,
             0x39: self.disable_cordwrap,
-            0x3a: self.set_cordwrap_pos,
-            0x3b: self.get_cordwrap,
-            0x3c: self.get_cordwrap_pos,
-            0xfc: self.get_approach,
-            0xfd: self.set_approach,
-            0xfe: self.fw_version,
+            0x3A: self.set_cordwrap_pos,
+            0x3B: self.get_cordwrap,
+            0x3C: self.get_cordwrap_pos,
+            0xFC: self.get_approach,
+            0xFD: self.set_approach,
+            0xFE: self.fw_version,
         }
-        if tui: self.init_dsp(stdscr)
+        self._focuser_handlers = {
+            0x01: self.get_focus_position,
+            0x02: self.goto_focus_fast,
+            0xFE: self.fw_version,
+        }
+        self._gps_handlers = {
+            0x01: self.get_gps_lat,
+            0x02: self.get_gps_long,
+            0x36: self.get_gps_time_valid,
+            0x37: self.get_gps_linked,
+            0xFE: self.fw_version,
+        }
+        if tui:
+            self.init_dsp(stdscr)
 
     def set_maxrate(self, data, snd, rcv):
-        if rcv == 0x11: self.alt_maxrate = unpack_int2(data)
-        else: self.azm_maxrate = unpack_int2(data)
-        return b''
+        if rcv == 0x11:
+            self.alt_maxrate = unpack_int2(data)
+        else:
+            self.azm_maxrate = unpack_int2(data)
+        return b""
 
     def get_maxrate(self, data, snd, rcv):
-        return bytes.fromhex('0fa01194')
+        return bytes.fromhex("0fa01194")
 
     def enable_maxrate(self, data, snd, rcv):
         self.use_maxrate = bool(data[0])
-        return b''
+        return b""
 
     def maxrate_enabled(self, data, snd, rcv):
-        return b'\x01' if self.use_maxrate else b'\x00'
+        return b"\x01" if self.use_maxrate else b"\x00"
 
     def cmd_0x10(self, data, snd, rcv):
         """Generic handler for 0x10 command (Lighting, Battery, Charging)."""
-        if rcv == 0xbf:  # LIGHT
+        if rcv == 0xBF:  # LIGHT
             if len(data) == 2:
-                if data[0] == 0: self.lt_tray = data[1]
-                elif data[0] == 1: self.lt_logo = data[1]
-                else: self.lt_wifi = data[1]
-                return b''
+                if data[0] == 0:
+                    self.lt_tray = data[1]
+                elif data[0] == 1:
+                    self.lt_logo = data[1]
+                else:
+                    self.lt_wifi = data[1]
+                return b""
             elif len(data) == 1:
-                if data[0] == 0: return bytes([int(self.lt_tray % 256)])
-                elif data[0] == 1: return bytes([int(self.lt_logo % 256)])
-                else: return bytes([int(self.lt_wifi % 256)])
-        elif rcv == 0xb7:  # CHG
-            if len(data): self.charge = bool(data[0]); return b''
-            else: return bytes([int(self.charge)])
-        elif rcv == 0xb6:  # BAT
+                if data[0] == 0:
+                    return bytes([int(self.lt_tray % 256)])
+                elif data[0] == 1:
+                    return bytes([int(self.lt_logo % 256)])
+                else:
+                    return bytes([int(self.lt_wifi % 256)])
+        elif rcv == 0xB7:  # CHG
+            if len(data):
+                self.charge = bool(data[0])
+                return b""
+            else:
+                return bytes([int(self.charge)])
+        elif rcv == 0xB6:  # BAT
             self.bat_voltage *= 0.99
-            return bytes.fromhex('0102') + struct.pack('!i', int(self.bat_voltage))
-        return b''
+            return bytes.fromhex("0102") + struct.pack("!i", int(self.bat_voltage))
+        return b""
 
     def cmd_0x18(self, data, snd, rcv):
         """Generic handler for 0x18 command (Battery current)."""
-        if rcv == 0xb6:  # BAT
+        if rcv == 0xB6:  # BAT
             if len(data):
-                i = data[0]*256 + data[1]
+                i = data[0] * 256 + data[1]
                 self.bat_current = max(2000, min(5000, i))
-            return struct.pack('!i', int(self.bat_current))[-2:]
-        return b''
+            return struct.pack("!i", int(self.bat_current))[-2:]
+        return b""
 
     def get_position(self, data, snd, rcv):
         """Returns current MC position as 3-byte fraction."""
@@ -253,7 +293,7 @@ class NexStarScope:
 
     def goto_fast(self, data, snd, rcv):
         """Starts a high-speed GOTO movement."""
-        self.last_cmd = 'GOTO_FAST'
+        self.last_cmd = "GOTO_FAST"
         self.slewing = self.goto = True
         self.guiding = False
         self.alt_guiderate = self.azm_guiderate = 0
@@ -265,41 +305,51 @@ class NexStarScope:
         else:
             self.trg_azm = a % 1.0
             diff = self.trg_azm - self.azm
-            if diff > 0.5: diff -= 1.0
-            if diff < -0.5: diff += 1.0
+            if diff > 0.5:
+                diff -= 1.0
+            if diff < -0.5:
+                diff += 1.0
             self.azm_rate = r if diff > 0 else -r
-        return b''
+        return b""
 
     def set_position(self, data, snd, rcv):
         """Sets the internal MC position (Sync)."""
         a = unpack_int3(data)
-        if rcv == 0x11: self.alt = self.trg_alt = a
-        else: self.azm = self.trg_azm = a % 1.0
-        return b''
+        if rcv == 0x11:
+            self.alt = self.trg_alt = a
+        else:
+            self.azm = self.trg_azm = a % 1.0
+        return b""
 
     def get_model(self, data, snd, rcv):
         """Returns simulated mount model ID (Evolution)."""
-        return bytes.fromhex('1687')
+        return bytes.fromhex("1687")
 
     def _set_guiderate(self, data, snd, rcv, factor):
         """Helper to set guiding rates."""
         a = (2**24 / 1024 / 360 / 3600) * unpack_int3(data) * factor
         self.guiding = abs(a) > 0
-        if rcv == 0x11: self.alt_guiderate = a
-        else: self.azm_guiderate = a
-        return b''
+        if rcv == 0x11:
+            self.alt_guiderate = a
+        else:
+            self.azm_guiderate = a
+        return b""
 
-    def set_pos_guiderate(self, data, snd, rcv): return self._set_guiderate(data, snd, rcv, 1)
-    def set_neg_guiderate(self, data, snd, rcv): return self._set_guiderate(data, snd, rcv, -1)
+    def set_pos_guiderate(self, data, snd, rcv):
+        return self._set_guiderate(data, snd, rcv, 1)
 
-    def level_start(self, data, snd, rcv): return b''
+    def set_neg_guiderate(self, data, snd, rcv):
+        return self._set_guiderate(data, snd, rcv, -1)
+
+    def level_start(self, data, snd, rcv):
+        return b""
 
     def goto_slow(self, data, snd, rcv):
         """Starts a low-speed precision GOTO movement."""
-        self.last_cmd = 'GOTO_SLOW'
+        self.last_cmd = "GOTO_SLOW"
         self.slewing = self.goto = True
         self.guiding = False
-        r = 1.0 / 360 # 1 deg/s
+        r = 0.5 / 360  # 0.5 deg/s
         a = unpack_int3(data)
         if rcv == 0x11:
             self.trg_alt = a
@@ -307,61 +357,113 @@ class NexStarScope:
         else:
             self.trg_azm = a % 1.0
             diff = self.trg_azm - self.azm
-            if diff > 0.5: diff -= 1.0
-            if diff < -0.5: diff += 1.0
+            if diff > 0.5:
+                diff -= 1.0
+            if diff < -0.5:
+                diff += 1.0
             self.azm_rate = r if diff > 0 else -r
-        return b''
+        return b""
 
     def slew_done(self, data, snd, rcv):
         """Checks if slew movement is finished."""
         rate = self.alt_rate if rcv == 0x11 else self.azm_rate
-        return b'\x00' if rate else b'\xff'
+        return b"\x00" if rate else b"\xff"
 
-    def at_index(self, data, snd, rcv): return b'\x00'
-    def seek_index(self, data, snd, rcv): return b''
+    def at_index(self, data, snd, rcv):
+        return b"\x00"
+
+    def seek_index(self, data, snd, rcv):
+        return b""
 
     def move_pos(self, data, snd, rcv):
         """Starts a constant-rate positive movement."""
-        self.last_cmd = 'MOVE_POS'
+        self.last_cmd = "MOVE_POS"
         self.slewing = True
         self.goto = False
         r = RATES[int(data[0])]
-        if rcv == 0x11: self.alt_rate = r
-        else: self.azm_rate = r
-        return b''
+        if rcv == 0x11:
+            self.alt_rate = r
+        else:
+            self.azm_rate = r
+        return b""
 
     def move_neg(self, data, snd, rcv):
         """Starts a constant-rate negative movement."""
-        self.last_cmd = 'MOVE_NEG'
+        self.last_cmd = "MOVE_NEG"
         self.slewing = True
         self.goto = False
         r = RATES[int(data[0])]
-        if rcv == 0x11: self.alt_rate = -r
-        else: self.azm_rate = -r
-        return b''
+        if rcv == 0x11:
+            self.alt_rate = -r
+        else:
+            self.azm_rate = -r
+        return b""
 
-    def enable_cordwrap(self, data, snd, rcv): self.cordwrap = True; return b''
-    def disable_cordwrap(self, data, snd, rcv): self.cordwrap = False; return b''
-    def set_cordwrap_pos(self, data, snd, rcv): self.cordwrap_pos = unpack_int3(data); return b''
-    def get_cordwrap(self, data, snd, rcv): return b'\xFF' if self.cordwrap else b'\x00'
-    def get_cordwrap_pos(self, data, snd, rcv): return pack_int3(self.cordwrap_pos)
+    def enable_cordwrap(self, data, snd, rcv):
+        self.cordwrap = True
+        return b""
 
-    def get_autoguide_rate(self, data, snd, rcv): return b'\xf0'
+    def disable_cordwrap(self, data, snd, rcv):
+        self.cordwrap = False
+        return b""
+
+    def set_cordwrap_pos(self, data, snd, rcv):
+        self.cordwrap_pos = unpack_int3(data)
+        return b""
+
+    def get_cordwrap(self, data, snd, rcv):
+        return b"\xff" if self.cordwrap else b"\x00"
+
+    def get_cordwrap_pos(self, data, snd, rcv):
+        return pack_int3(self.cordwrap_pos)
+
+    def get_autoguide_rate(self, data, snd, rcv):
+        return b"\xf0"
+
+    def get_focus_position(self, data, snd, rcv):
+        """Returns simulated focuser position."""
+        return pack_int3(self.focus_pos / 16777216.0)
+
+    def goto_focus_fast(self, data, snd, rcv):
+        """Moves simulated focuser."""
+        self.focus_pos = int(unpack_int3(data) * 16777216.0)
+        return b""
+
+    def get_gps_lat(self, data, snd, rcv):
+        """Returns simulated GPS latitude."""
+        return bytes(self.gps_lat)
+
+    def get_gps_long(self, data, snd, rcv):
+        """Returns simulated GPS longitude."""
+        return bytes(self.gps_lon)
+
+    def get_gps_time_valid(self, data, snd, rcv):
+        """Checks if GPS time is valid."""
+        return b"\x01"
+
+    def get_gps_linked(self, data, snd, rcv):
+        """Checks if GPS is linked."""
+        return b"\x01" if self.gps_linked else b"\x00"
 
     def get_approach(self, data, snd, rcv):
         return bytes((self.alt_approach if rcv == 0x11 else self.azm_approach,))
-            
+
     def set_approach(self, data, snd, rcv):
-        if rcv == 0x11: self.alt_approach = data[0]
-        else: self.azm_approach = data[0]
-        return b''
+        if rcv == 0x11:
+            self.alt_approach = data[0]
+        else:
+            self.azm_approach = data[0]
+        return b""
 
     def fw_version(self, data, snd, rcv):
         """Returns firmware version bytes for the target device."""
-        if rcv in (0x10, 0x11): return bytes(NexStarScope.__mcfw_ver)
-        if rcv == 0x01: return bytes(NexStarScope.__mbfw_ver)
-        if rcv in (0x04, 0x0d): return bytes(NexStarScope.__hcfw_ver)
-        return b''
+        if rcv in (0x10, 0x11):
+            return bytes(NexStarScope.__mcfw_ver)
+        if rcv == 0x01:
+            return bytes(NexStarScope.__mbfw_ver)
+        if rcv in (0x04, 0x0D):
+            return bytes(NexStarScope.__hcfw_ver)
+        return b""
 
     def init_dsp(self, stdscr):
         """Initializes curses-based display windows."""
@@ -379,50 +481,73 @@ class NexStarScope:
 
     def update_dsp(self):
         """Updates curses display with current telescope state."""
-        if not self.scr: return
-        mode = 'Slewing' if self.slewing else ('Guiding' if self.guiding else 'Idle')
-        self.state_w.clear(); self.state_w.addstr(0, 1, 'State: %8s' % mode); self.state_w.refresh()
-        
-        self.pos_w.clear(); self.pos_w.border()
-        self.pos_w.addstr(1, 3, 'Alt: ' + repr_angle(self.alt))
-        self.pos_w.addstr(2, 3, 'Azm: ' + repr_angle(self.azm)); self.pos_w.refresh()
-        
-        self.trg_w.clear(); self.trg_w.border()
-        self.trg_w.addstr(1, 3, 'Alt: ' + repr_angle(self.trg_alt))
-        self.trg_w.addstr(2, 3, 'Azm: ' + repr_angle(self.trg_azm)); self.trg_w.refresh()
-        
-        self.rate_w.clear(); self.rate_w.border()
-        self.rate_w.addstr(1, 3, 'Alt: %+8.4f °/s' % (self.alt_rate*360))
-        self.rate_w.addstr(2, 3, 'Azm: %+8.4f °/s' % (self.azm_rate*360)); self.rate_w.refresh()
-        
-        self.other_w.clear(); self.other_w.border()
-        self.other_w.addstr(1, 3, 'BAT: %9.6f V' % (self.bat_voltage/1e6))
-        self.other_w.addstr(6, 3, 'Cordwrap: %3s' % ('On' if self.cordwrap else 'Off'))
+        if not self.scr:
+            return
+        mode = "Slewing" if self.slewing else ("Guiding" if self.guiding else "Idle")
+        self.state_w.clear()
+        self.state_w.addstr(0, 1, "State: %8s" % mode)
+        self.state_w.refresh()
+
+        self.pos_w.clear()
+        self.pos_w.border()
+        self.pos_w.addstr(1, 3, "Alt: " + repr_angle(self.alt))
+        self.pos_w.addstr(2, 3, "Azm: " + repr_angle(self.azm))
+        self.pos_w.refresh()
+
+        self.trg_w.clear()
+        self.trg_w.border()
+        self.trg_w.addstr(1, 3, "Alt: " + repr_angle(self.trg_alt))
+        self.trg_w.addstr(2, 3, "Azm: " + repr_angle(self.trg_azm))
+        self.trg_w.refresh()
+
+        self.rate_w.clear()
+        self.rate_w.border()
+        self.rate_w.addstr(1, 3, "Alt: %+8.4f °/s" % (self.alt_rate * 360))
+        self.rate_w.addstr(2, 3, "Azm: %+8.4f °/s" % (self.azm_rate * 360))
+        self.rate_w.refresh()
+
+        self.other_w.clear()
+        self.other_w.border()
+        self.other_w.addstr(1, 3, "BAT: %9.6f V" % (self.bat_voltage / 1e6))
+        self.other_w.addstr(6, 3, "Cordwrap: %3s" % ("On" if self.cordwrap else "Off"))
         self.other_w.refresh()
-        
-        self.cmd_log_w.clear(); self.cmd_log_w.border()
-        for n, cmd in enumerate(self.cmd_log): self.cmd_log_w.addstr(n+1, 1, str(cmd)[:58])
+
+        self.cmd_log_w.clear()
+        self.cmd_log_w.border()
+        for n, cmd in enumerate(self.cmd_log):
+            self.cmd_log_w.addstr(n + 1, 1, str(cmd)[:58])
         self.cmd_log_w.refresh()
 
     def tick(self, interval):
         """Physical model update called on every timer tick."""
-        eps = 1e-6 if self.last_cmd != 'GOTO_FAST' else 1e-4
-        maxrate = 5/360
+        eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
+        maxrate = 20 / 360  # Increased maxrate for faster testing
 
-        self.alt += (self.alt_rate + self.alt_guiderate) * interval
-        self.azm += (self.azm_rate + self.azm_guiderate) * interval
-        
+        # Update Altitude with limit enforcement
+        alt_deg = self.alt * 360.0
+        if alt_deg > 180:
+            alt_deg -= 360.0
+        alt_deg += (self.alt_rate + self.alt_guiderate) * 360.0 * interval
+        alt_deg = max(self.alt_min * 360.0, min(self.alt_max * 360.0, alt_deg))
+        self.alt = (alt_deg % 360.0) / 360.0
+
+        # Update Azimuth (wraps around)
+        self.azm = (self.azm + (self.azm_rate + self.azm_guiderate) * interval) % 1.0
+
         if self.slewing and self.goto:
-            for axis in ['azm', 'alt']:
+            for axis in ["azm", "alt"]:
                 cur = getattr(self, axis)
-                trg = getattr(self, f'trg_{axis}')
-                rate_attr = f'{axis}_rate'
+                trg = getattr(self, f"trg_{axis}")
+                rate_attr = f"{axis}_rate"
                 diff = trg - cur
-                if axis == 'azm':
-                    if diff > 0.5: diff -= 1.0
-                    elif diff < -0.5: diff += 1.0
-                
-                if abs(diff) < eps: setattr(self, rate_attr, 0)
+                if axis == "azm":
+                    if diff > 0.5:
+                        diff -= 1.0
+                    elif diff < -0.5:
+                        diff += 1.0
+
+                if abs(diff) < eps:
+                    setattr(self, rate_attr, 0)
                 else:
                     s = 1 if diff > 0 else -1
                     r = min(maxrate, abs(getattr(self, rate_attr)))
@@ -433,14 +558,16 @@ class NexStarScope:
 
         if abs(self.azm_rate) < eps and abs(self.alt_rate) < eps:
             self.slewing = self.goto = False
-        
-        if self.tui: self.update_dsp()
+
+        if self.tui:
+            self.update_dsp()
 
     def print_msg(self, msg):
         """Adds a message to the internal log deque."""
         if not self.msg_log or msg != self.msg_log[-1]:
             self.msg_log.append(msg)
-        if not self.tui: print(f"MSG: {msg}")
+        if not self.tui:
+            print(f"MSG: {msg}")
 
     def handle_msg(self, msg):
         """Main entry point for incoming AUX data stream."""
@@ -452,16 +579,34 @@ class NexStarScope:
                 if make_checksum(cmd[:-1]) != s:
                     self.print_msg(f"Checksum error in cmd: {cmd.hex()}")
                     continue
-                
+
                 # Always echo
-                echo = b';' + cmd
+                echo = b";" + cmd
                 responses.append(echo)
-                
-                handlers = self._mc_handlers if t in (0x10, 0x11) else self._other_handlers
+
+                # Log command
+                cmd_name = cmd_names.get(c, f"0x{c:02x}")
+                trg_name = trg_names.get(t, f"0x{t:02x}")
+                self.cmd_log.append(f"{trg_name}: {cmd_name}")
+
+                if t in (0x10, 0x11):
+                    handlers = self._mc_handlers
+                elif t == 0x12:
+                    handlers = self._focuser_handlers
+                elif t == 0xB0:
+                    handlers = self._gps_handlers
+                else:
+                    handlers = self._other_handlers
+
                 if c in handlers:
                     resp_data = handlers[c](d, f, t)
                     header = bytes((len(resp_data) + 3, t, f, c))
-                    resp_payload = b';' + header + resp_data + bytes((make_checksum(header + resp_data),))
+                    resp_payload = (
+                        b";"
+                        + header
+                        + resp_data
+                        + bytes((make_checksum(header + resp_data),))
+                    )
                     responses.append(resp_payload)
                 else:
                     # self.print_msg(f"No handler for cmd {hex(c)} to {hex(t)}")
@@ -469,6 +614,7 @@ class NexStarScope:
             except Exception as e:
                 self.print_msg(f"Error handling cmd: {e}")
                 import traceback
+
                 traceback.print_exc()
-                
-        return b''.join(responses)
+
+        return b"".join(responses)

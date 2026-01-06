@@ -1,115 +1,129 @@
 # Changelog
 
-Wszystkie istotne zmiany w tym projekcie będą dokumentowane w tym pliku.
+All notable changes to this project will be documented in this file.
+
+## [0.6.0] - 2026-01-06
+
+### Added
+- **Phase 6: Safety & Accessories** implemented.
+- New INDI properties: `TELESCOPE_LIMITS`, `TELESCOPE_CORDWRAP`, `TELESCOPE_CORDWRAP_POS`.
+- Support for **Focuser** accessory (`ABS_FOCUS_POSITION`).
+- Support for **GPS** module (`GPS_REFRESH`, automatic location sync).
+- New test suite `tests/test_safety.py` for safety features.
+- Enforced software slew limits in `goto_position` and background monitoring.
+
+### Changed
+- **Internationalization**: All documentation, comments, and UI strings translated to **English**.
+- Increased simulator slew rates: `GOTO_FAST` at 15 deg/s, `GOTO_SLOW` at 0.5 deg/s.
+- Improved AUX command logging in simulator TUI.
+- Fixed latitude/longitude parsing from GPS module.
 
 ## [0.5.3] - 2026-01-06
 
 ### Added
-- Nowy test funkcjonalny `test_6b_robustness_pole` sprawdzający stabilność sterownika w pobliżu bieguna niebieskiego.
+- New functional test `test_6b_robustness_pole` checking driver stability near the celestial pole.
 
 ### Fixed
-- Zwiększono prędkości GoTo w symulatorze (Fast: 5°/s, Slow: 1°/s) oraz wydłużono timeouty w sterowniku, eliminując błędy czasu oczekiwania w testach.
-- Poprawiono model fizyczny ruchu w symulatorze (płynniejsze hamowanie i brak oscylacji przy celu).
-- Zabezpieczono funkcje matematyczne przed błędami precyzji w pobliżu osobliwości (bieguny, zenit).
+- Increased GoTo speeds in simulator (Fast: 5°/s, Slow: 1°/s) and extended timeouts in the driver, eliminating timeout errors in tests.
+- Improved physical motion model in simulator (smoother braking and no oscillations at target).
+- Secured mathematical functions against precision errors near singularities (poles, zenith).
 
 ## [0.5.2] - 2026-01-06
 
 ### Added
-- Tryb debugowania (`-d` / `--debug`) w symulatorze, raportujący parametry pracy na `stderr`.
-- Implementacja okna przesuwnego (sliding window) dla obliczeń prędkości nieba (vRA, vDec) w celu eliminacji szumów numerycznych.
+- Debug mode (`-d` / `--debug`) in simulator, reporting operation parameters to `stderr`.
+- Implementation of a sliding window for sky velocity calculations (vRA, vDec) to eliminate numerical noise.
 
 ### Fixed
-- Naprawiono oscylacje wyświetlanych prędkości vRA/vDec w interfejsie TUI.
-- Poprawiono stabilność obliczeń prędkości w trybie headless.
+- Fixed oscillations of displayed vRA/vDec speeds in the TUI interface.
+- Improved velocity calculation stability in headless mode.
 
 ## [0.5.1] - 2026-01-06
 
 ### Added
-- Rozszerzenie interfejsu TUI symulatora o wyświetlanie prędkości obrotu silników (vAlt, vAzm) w °/s.
-- Wyświetlanie prędkości poruszania się po sferze niebieskiej (vRA, vDec) w "/s (arcsec/s).
-- Poprawa stylizacji interfejsu Textual.
+- Extension of the simulator TUI interface with motor rotation speed display (vAlt, vAzm) in °/s.
+- Display of celestial sphere movement speeds (vRA, vDec) in "/s (arcsec/s).
+- Improved styling of the Textual interface.
 
 ## [0.5.0] - 2026-01-05
 
 ### Added
-- Nowoczesny interfejs TUI symulatora oparty na bibliotece **Textual** (zastąpienie curses).
-- Zaawansowany **system wyrównania (Alignment)** oparty na transformacjach macierzowych 3x3.
-- Obsługa właściwości `TELESCOPE_ON_COORD_SET` (tryby SLEW, TRACK, SYNC).
-- Możliwość dodawania punktów wyrównania (max 3 gwiazdy) w celu korekcji błędów ustawienia montażu.
-- Nowy zestaw testów: `test_10_alignment_3star` oraz testy matematyki wyrównania (`tests/test_alignment_math.py`).
-- Obsługa zmiennej środowiskowej `EXTERNAL_SIM` w testach funkcjonalnych.
+- Modern simulator TUI interface based on the **Textual** library (replacing curses).
+- Advanced **Alignment system** based on 3x3 matrix transformations.
+- Support for `TELESCOPE_ON_COORD_SET` property (SLEW, TRACK, SYNC modes).
+- Ability to add alignment points (max 3 stars) to correct mount alignment errors.
+- New test suite: `test_10_alignment_3star` and alignment math tests (`tests/test_alignment_math.py`).
+- Support for `EXTERNAL_SIM` environment variable in functional tests.
 
 ### Changed
-- Pełne udokumentowanie kodu (Docstrings w standardzie Google Style) dla wszystkich modułów.
-- Usunięcie ostrzeżeń o przestarzałych funkcjach (`utcnow`, `get_event_loop`).
-- Poprawa logiki `Park` – obsługa "zawijania" licznika kroków (wrap-around).
-- Zmiana formatu konfiguracji na YAML (`config.yaml`).
+- Full code documentation (Google Style Docstrings) for all modules.
+- Removed deprecated function call warnings (`utcnow`, `get_event_loop`).
+- Improved `Park` logic – handling step counter wrap-around.
+- Changed configuration format to YAML (`config.yaml`).
 
 ## [0.4.0] - 2026-01-05
 
 ### Added
-- Implementacja logiki podejścia **Anti-backlash GoTo** (Faza 4).
-- Nowe właściwości INDI: `GOTO_APPROACH_MODE` (DISABLED, FIXED_OFFSET, TRACKING_DIRECTION) oraz `GOTO_APPROACH_OFFSET`.
-- Zaawansowana pętla śledzenia oparta na **predykcji 2. rzędu** (Faza 5).
-- Algorytm wyznaczania prędkości kątowych ($\omega$) za pomocą symetrycznego wyrażenia różniczkowego.
-- Nowe właściwości INDI: `TELESCOPE_TRACK_MODE` (Sidereal, Solar, Lunar).
-- Mechanizm blokowania komunikacji (`asyncio.Lock`) w `AUXCommunicator` dla zapewnienia bezpieczeństwa współbieżnego dostępu do magistrali AUX.
-- Nowe testy funkcjonalne: `test_7_approach_logic`, `test_8_approach_tracking_direction`, `test_9_predictive_tracking`.
+- Implementation of **Anti-backlash GoTo** approach logic (Phase 4).
+- New INDI properties: `GOTO_APPROACH_MODE` (DISABLED, FIXED_OFFSET, TRACKING_DIRECTION) and `GOTO_APPROACH_OFFSET`.
+- Advanced tracking loop based on **2nd order prediction** (Phase 5).
+- Angular velocity ($\omega$) determination algorithm using symmetric differential expression.
+- New INDI properties: `TELESCOPE_TRACK_MODE` (Sidereal, Solar, Lunar).
+- Communication locking mechanism (`asyncio.Lock`) in `AUXCommunicator` to ensure safe concurrent access to the AUX bus.
+- New functional tests: `test_7_approach_logic`, `test_8_approach_tracking_direction`, `test_9_predictive_tracking`.
 
 ### Changed
-- Refaktoryzacja metody GoTo w celu obsługi wieloetapowego ruchu (Stage 1: Fast Approach, Stage 2: Slow Final).
-- Metoda `equatorial_to_steps` obsługuje teraz parametr `time_offset`.
+- Refactored GoTo method to support multi-stage movement (Stage 1: Fast Approach, Stage 2: Slow Final).
+- `equatorial_to_steps` method now supports `time_offset` parameter.
 
 ## [0.3.0] - 2026-01-05
 
 ### Added
-- Integracja z biblioteką `ephem` dla transformacji współrzędnych astronomicznych.
-- Obsługa właściwości INDI `GEOGRAPHIC_COORD` (szerokość, długość, wysokość).
-- Obsługa właściwości INDI `EQUATORIAL_EOD_COORD` (RA/Dec).
-- Implementacja logiki GoTo na współrzędne równikowe (RA/Dec -> Alt/Az -> Encoders).
-- Automatyczne wyliczanie i raportowanie bieżącego RA/Dec na podstawie pozycji enkodera.
-- Nowy test funkcjonalny `test_6_equatorial_goto` weryfikujący poprawność transformacji.
-- Obsługa pliku konfiguracyjnego `config.json` z domyślną lokalizacją w Bęble.
-- Instrukcja integracji ze Stellarium do weryfikacji wizualnej.
+- Integration with `ephem` library for astronomical coordinate transformations.
+- Support for INDI property `GEOGRAPHIC_COORD` (Latitude, Longitude, Elevation).
+- Support for INDI property `EQUATORIAL_EOD_COORD` (RA/Dec).
+- Implementation of GoTo logic for equatorial coordinates (RA/Dec -> Alt/Az -> Encoders).
+- Automatic calculation and reporting of current RA/Dec based on encoder position.
+- New functional test `test_6_equatorial_goto` verifying transformation correctness.
+- Configuration file `config.yaml` support with default location in Bębło.
+- Stellarium integration instructions for visual verification.
 
 ### Changed
-- Poprawiono odporność metody `handle_equatorial_goto` na brak danych zdarzenia.
+- Improved `handle_equatorial_goto` robustness against missing event data.
 
 ## [0.2.1] - 2026-01-05
 
 ### Added
-- Kompletny zestaw testów funkcjonalnych w katalogu `tests/` oparty na `unittest`.
-- Testy pokrywają: Firmware Info, GoTo Precision, Tracking Logic, Park/Unpark, Connection Robustness.
-- Automatyczne przechwytywanie logów symulatora podczas testów (`test_sim.log`).
+- Complete set of functional tests in `tests/` directory based on `unittest`.
+- Tests cover: Firmware Info, GoTo Precision, Tracking Logic, Park/Unpark, Connection Robustness.
+- Automatic capture of simulator logs during tests (`test_sim.log`).
 
 ### Changed
-- Poprawiono odporność metod `handle_sync`, `handle_park`, `handle_unpark`, `handle_guide_rate` na brak danych zdarzenia (ułatwia testowanie).
-- Zsynchronizowano stan projektu i roadmapę.
+- Improved robustness of `handle_sync`, `handle_park`, `handle_unpark`, `handle_guide_rate` methods against missing event data (facilitates testing).
+- Synchronized project state and roadmap.
 
 ## [0.2.0] - 2026-01-05
 
 ### Added
-- Wsparcie dla połączeń TCP w `AUXCommunicator` (URL `socket://host:port`).
-- Mechanizm "Echo Skipping" w protokole AUX, umożliwiający pracę na magistralach jednoprzewodowych.
-- Tryb headless (`-t` / `--text`) w symulatorze teleskopu.
-- Obsługa biblioteki `ephem` w symulatorze.
-- Implementacja właściwości `TELESCOPE_GUIDE_RATE` w sterowniku INDI.
-- Zweryfikowano działanie pętli sterowania (Slew/Read/Tracking) za pomocą rozszerzonego testu automatycznego.
-
+- TCP connection support in `AUXCommunicator` (URL `socket://host:port`).
+- "Echo Skipping" mechanism in the AUX protocol, enabling operation on single-wire buses.
+- Headless mode (`-t` / `--text`) in the telescope simulator.
+- `ephem` library support in the simulator.
+- Implementation of `TELESCOPE_GUIDE_RATE` property in the INDI driver.
+- Verified control loop operation (Slew/Read/Tracking) with an extended automated test.
 
 ### Changed
-- Pełna refaktoryzacja `celestron_indi_driver.py` w celu dostosowania do API `indipydriver 3.0.4`.
-- Naprawiono błędy konstruktorów `NumberMember` (kolejność argumentów).
-- Poprawa stabilności odczytu ramek AUX (użycie `readexactly`).
-- Usunięcie błędnych bajtów zerowych z plików źródłowych.
-
+- Full refactoring of `celestron_indi_driver.py` to adapt to `indipydriver 3.0.4` API.
+- Fixed `NumberMember` constructor errors (argument order).
+- Improved AUX frame reading stability (using `readexactly`).
+- Removed erroneous null bytes from source files.
 
 ## [0.1.0] - 2026-01-05
 
 ### Added
-- Początkowa implementacja sterownika Celestron AUX w Pythonie.
-- Podstawowe właściwości INDI: `CONNECTION`, `PORT`, `FIRMWARE_INFO`, `MOUNT_POSITION`.
-- Sterowanie ruchem: `SLEW_RATE`, `TELESCOPE_MOTION_NS/WE`, `TELESCOPE_ABSOLUTE_COORD`.
-- Synchronizacja montażu i parkowanie.
-- Symulator teleskopu z interfejsem TUI (curses).
-- Implementacja binarnego protokołu AUX (pakowanie/rozpakowywanie ramek, sumy kontrolne).
+- Initial implementation of the Celestron AUX driver in Python.
+- Basic INDI properties: `CONNECTION`, `PORT`, `FIRMWARE_INFO`, `MOUNT_POSITION`.
+- Motion control: `SLEW_RATE`, `TELESCOPE_MOTION_NS/WE`, `TELESCOPE_ABSOLUTE_COORD`.
+- Mount synchronization and parking.
+- Telescope simulator with TUI (curses) interface.
+- Implementation of binary AUX protocol (packet packing/unpacking, checksums).

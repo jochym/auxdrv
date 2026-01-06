@@ -1,14 +1,14 @@
 # Celestron AUX INDI Driver (Python)
 
-Nowoczesny sterownik INDI dla montaży Celestron wykorzystujący protokół AUX, z wbudowanym symulatorem do testów.
+A modern INDI driver for Celestron mounts using the AUX protocol, with a built-in simulator for testing.
 
-## Architektura projektu
+## Project Architecture
 
-*   `celestron_indi_driver.py`: Główny sterownik INDI integrujący się z biblioteką `indipydriver`.
-*   `celestron_aux_driver.py`: Biblioteka obsługująca binarny protokół komunikacji Celestron AUX.
-*   `simulator/`: Rozbudowany symulator teleskopu NexStar, umożliwiający testowanie drivera bez fizycznego sprzętu.
+*   `celestron_indi_driver.py`: Main INDI driver integrating with the `indipydriver` library.
+*   `celestron_aux_driver.py`: Library handling the Celestron AUX binary communication protocol.
+*   `simulator/`: Sophisticated NexStar telescope simulator, allowing driver testing without physical hardware.
 
-## Wymagania
+## Requirements
 
 *   Python 3.8+
 *   `indipydriver >= 3.0.0`
@@ -18,42 +18,42 @@ Nowoczesny sterownik INDI dla montaży Celestron wykorzystujący protokół AUX,
 *   `textual`
 *   `rich`
 
-Instalacja zależności:
+Installation of dependencies:
 ```bash
 pip install indipydriver pyserial-asyncio ephem pyyaml textual rich
 ```
 
-## Uruchomienie
+## Running
 
-1.  **Uruchomienie symulatora:**
-    *   Tryb graficzny (Textual TUI): `python simulator/nse_simulator.py`
-    *   Tryb headless (tło): `python simulator/nse_simulator.py -t`
-2.  **Uruchomienie sterownika INDI:**
+1.  **Starting the simulator:**
+    *   Graphical mode (Textual TUI): `python simulator/nse_simulator.py`
+    *   Headless mode (background): `python simulator/nse_simulator.py -t`
+2.  **Starting the INDI driver:**
     ```bash
     python celestron_indi_driver.py
     ```
 
-Dla połączenia z symulatorem użyj portu: `socket://localhost:2000`.
+To connect to the simulator, use the port: `socket://localhost:2000`.
 
-## Integracja ze Stellarium
+## Stellarium Integration
 
-Symulator udostępnia serwer zgodny z protokołem Stellarium na porcie `10001`. Aby zweryfikować działanie:
+The simulator provides a server compatible with the Stellarium protocol on port `10001`. To verify operation:
 
-1.  Uruchom symulator: `python simulator/nse_simulator.py`
-2.  W Stellarium przejdź do: **Konfiguracja (F2) -> Wtyczki -> Sterowanie teleskopem -> Skonfiguruj**.
-3.  Dodaj nowy teleskop:
-    *   Sterowany przez: **Zewnętrzne oprogramowanie lub inny komputer**.
-    *   Nazwa: **NSE Simulator**.
+1.  Start the simulator: `python simulator/nse_simulator.py`
+2.  In Stellarium, go to: **Configuration (F2) -> Plugins -> Telescope Control -> Configure**.
+3.  Add a new telescope:
+    *   Controlled by: **External software or another computer**.
+    *   Name: **NSE Simulator**.
     *   Host: **localhost**, Port: **10001**.
-4.  Połącz się z teleskopem. Zobaczysz celownik teleskopu na mapie nieba.
+4.  Connect to the telescope. You will see the telescope reticle on the sky map.
 
-## System Wyrównania (Alignment)
+## Alignment System
 
-Sterownik obsługuje 3-punktowe wyrównanie na gwiazdach. Aby wykonać kalibrację:
-1.  Ustaw tryb `Coord Set Mode` na **SYNC**.
-2.  Wybierz gwiazdę w planetarium i wykonaj polecenie **Sync**.
-3.  Powtórz dla 2-3 gwiazd w różnych częściach nieba. Sterownik automatycznie wyliczy macierz transformacji poprawiającą celność GoTo.
+The driver supports 3-point star alignment. To perform calibration:
+1.  Set `Coord Set Mode` to **SYNC**.
+2.  Select a star in your planetarium and issue a **Sync** command.
+3.  Repeat for 2-3 stars in different parts of the sky. The driver will automatically calculate a transformation matrix to improve GoTo accuracy.
 
-## Konfiguracja
+## Configuration
 
-Lokalizacja obserwatora oraz porty są definiowane w pliku `config.yaml`. Domyślnie ustawiono współrzędne dla miejscowości **Bębło, Polska**.
+Observer location and ports are defined in the `config.yaml` file. Default coordinates are set for **Beblo, Poland**.

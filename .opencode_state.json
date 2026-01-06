@@ -5,6 +5,9 @@
 - **Last Updated**: 2026-01-06
 - **Current Phase**: Phase 6 - Safety & Accessories
 
+## Global Rules
+- **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
+
 ## Project Progress
 
 ### Completed Tasks ✅
@@ -16,18 +19,16 @@
 - **Phase 4**: Anti-backlash GoTo logic
 - **Phase 5**: Advanced Predictive Tracking (2nd Order)
 - **Phase 5.5**: Modern TUI & Alignment System
-  - Implemented Textual TUI for simulator
-  - Implemented 3-point Matrix Alignment system
-  - Added stabilized velocity monitoring (Motor & Sky) with sliding window
-  - Added debug mode (-d) for real-time telemetry logging
-  - Optimized slew speeds and stability for automated testing
+- **Phase 6**: Safety & Accessories
+  - Implemented Slew Limits (Altitude/Azimuth)
+  - Implemented Cord Wrap Prevention
+  - Added Focuser support
+  - Added GPS module support
+- **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 6**: Safety features
-  - Planning Slew Limits and Cord Wrap Prevention
+- **Verification**: Running full functional test suite with optimized slew rates.
 
 ### Pending Tasks 📋
-1. Implement Slew Limits (ALT/AZ min/max)
-2. Implement Cord Wrap Prevention logic
-3. Add Focuser support (MC_FOCUS targets)
-4. Add GPS module support
+1. Implement non-sidereal tracking (Satellites/Comets)
+2. Add support for TLE data integration
