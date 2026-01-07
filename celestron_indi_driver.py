@@ -69,6 +69,27 @@ config = load_config()
 obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
 
 
+def apply_refraction(alt_deg):
+    """Adds atmospheric refraction to true altitude to get apparent altitude."""
+    if alt_deg < -2 or alt_deg > 89.9:
+        return alt_deg
+    h = max(0.0, alt_deg)
+    ref_arcmin = 1.0 / math.tan(math.radians(h + 7.31 / (h + 4.4)))
+    return alt_deg + ref_arcmin / 60.0
+
+
+def remove_refraction(alt_deg):
+    """Subtracts atmospheric refraction from apparent altitude to get true altitude."""
+    if alt_deg < -2 or alt_deg > 89.9:
+        return alt_deg
+    true_h = alt_deg
+    for _ in range(3):
+        h = max(0.0, true_h)
+        ref = 1.0 / math.tan(math.radians(h + 7.31 / (h + 4.4)))
+        true_h = alt_deg - ref / 60.0
+    return true_h
+
+
 class CelestronAUXDriver(IPyDriver):
     """
     INDI Driver for Celestron mounts.
@@ -117,6 +138,8 @@ class CelestronAUXDriver(IPyDriver):
                 self.target_type_vector,
                 self.planet_select_vector,
                 self.tle_data_vector,
+                self.refraction_vector,
+                self.calibration_params_vector,
             ],
         )
 
@@ -606,6 +629,42 @@ class CelestronAUXDriver(IPyDriver):
             [self.tle_name, self.tle_line1, self.tle_line2],
         )
 
+        # Refraction Correction
+        self.refraction_on = SwitchMember("ENABLED", "Enabled", "Off")
+        self.refraction_off = SwitchMember("DISABLED", "Disabled", "On")
+        self.refraction_vector = SwitchVector(
+            "REFRACTION_CORRECTION",
+            "Refraction Correction",
+            "Options",
+            "rw",
+            "OneOfMany",
+            "Idle",
+            [self.refraction_on, self.refraction_off],
+        )
+
+        # Advanced Calibration Display
+        self.cal_cone = NumberMember(
+            "CONE_ERROR", "Cone Error (arcmin)", "%.2f", "-600", "600", "0", "0"
+        )
+        self.cal_nonperp = NumberMember(
+            "NON_PERP", "Non-Perpendicularity (arcmin)", "%.2f", "-600", "600", "0", "0"
+        )
+        self.cal_alt_offset = NumberMember(
+            "ALT_OFFSET", "Alt Index Offset (arcmin)", "%.2f", "-600", "600", "0", "0"
+        )
+        self.calibration_params_vector = NumberVector(
+            "CALIBRATION_PARAMS",
+            "Calibration Parameters",
+            "Alignment",
+            "ro",
+            "Idle",
+            [self.cal_cone, self.cal_nonperp, self.cal_alt_offset],
+        )
+
+        # Post-init for properties that need values
+        self.refraction_off.membervalue = "On"
+        self.refraction_on.membervalue = "Off"
+
     def update_observer(self, time_offset: float = 0):
         """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
@@ -684,6 +743,9 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "TLE_DATA":
             self.tle_data_vector.update(event.root)
             await self.tle_data_vector.send_setVector(state="Ok")
+        elif event.vectorname == "REFRACTION_CORRECTION":
+            self.refraction_vector.update(event.root)
+            await self.refraction_vector.send_setVector(state="Ok")
 
     async def handle_limits(self, event):
         """Updates internal slew limits."""
@@ -1069,7 +1131,7 @@ class CelestronAUXDriver(IPyDriver):
         elif self.align_clear_last.membervalue == "On":
             if self._align_model.points:
                 self._align_model.points.pop()
-                self._align_model._compute_matrix()
+                self._align_model._compute_model()
             self.align_clear_last.membervalue = "Off"
             await self.update_alignment_status()
 
@@ -1080,6 +1142,15 @@ class CelestronAUXDriver(IPyDriver):
         self.align_point_count.membervalue = len(self._align_model.points)
         self.align_rms_error.membervalue = self._align_model.rms_error_arcsec
         await self.align_status_vector.send_setVector()
+
+        # Update calibration parameters (from the 6-param model)
+        # self.params = [roll, pitch, yaw, ID, CH, NP]
+        # All params are now in RADIANS. Convert to arcmin.
+        rad2arcmin = (180.0 * 60.0) / math.pi
+        self.cal_alt_offset.membervalue = self._align_model.params[3] * rad2arcmin
+        self.cal_cone.membervalue = self._align_model.params[4] * rad2arcmin
+        self.cal_nonperp.membervalue = self._align_model.params[5] * rad2arcmin
+        await self.calibration_params_vector.send_setVector()
 
     async def handle_park(self, event):
         """Moves the mount to the park position (0,0 steps)."""
@@ -1140,15 +1211,10 @@ class CelestronAUXDriver(IPyDriver):
                 # We could implement distance-based weighting here
                 pass
 
-            # 4. Add point to alignment model
+            # 4. Add point to alignment model (Thinning handled inside)
             sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
             mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
             self._align_model.add_point(sky_vec, mount_vec, weight=weight)
-
-            # 5. Pruning
-            if self.align_auto_prune.membervalue == "On":
-                max_pts = int(self.align_max_points.membervalue)
-                self._align_model.prune(max_pts)
 
             await self.update_alignment_status()
 
@@ -1247,6 +1313,11 @@ class CelestronAUXDriver(IPyDriver):
         ideal_az_deg = math.degrees(float(body.az))
         ideal_alt_deg = math.degrees(float(body.alt))
 
+        # 2. Refraction (True to Apparent)
+        if self.refraction_on.membervalue == "On":
+            ideal_alt_deg = apply_refraction(ideal_alt_deg)
+
+        # 3. Apply Alignment Transform
         sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
         bias = float(self.align_local_bias.membervalue) / 100.0
         mount_vec = self._align_model.transform_to_mount(
@@ -1270,6 +1341,10 @@ class CelestronAUXDriver(IPyDriver):
         mount_vec = vector_from_altaz(real_az_deg, real_alt_deg)
         sky_vec = self._align_model.transform_to_sky(mount_vec)
         ideal_az_deg, ideal_alt_deg = vector_to_altaz(sky_vec)
+
+        # 2. Refraction (Apparent to True)
+        if self.refraction_on.membervalue == "On":
+            ideal_alt_deg = remove_refraction(ideal_alt_deg)
 
         self.update_observer()
         ra_rad, dec_rad = self.observer.radec_of(

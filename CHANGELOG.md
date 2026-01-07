@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-01-07
+
+### Added
+- **Phase 11: Advanced Calibration** implemented.
+- **6-Parameter Geometric Model**: Compenses for Rotation, Cone Error ($CH$), Non-Perpendicularity ($NP$), and Altitude Index error ($ID$).
+- **Spatial Point Thinning**: Alignment points within 5 degrees are automatically replaced, ensuring even sky coverage and preventing local "clouds" of data from skewing the global model.
+- **Refraction Correction**: Switchable atmospheric refraction correction in the driver logic.
+- **Calibration Tab**: New INDI tab displaying measured mechanical errors and residuals.
+- **Graceful Fallback**: The alignment system automatically switches between Identity, Axis-Angle, SVD, and Full Geometric models depending on the number of available stars.
+- New test suite `tests/test_alignment_advanced.py`.
+
+### Changed
+- Refactored `AlignmentModel` to use `scipy.optimize.least_squares` for non-linear fitting.
+- Updated `celestron_indi_driver.py` to support new calibration properties.
+- Formalized dependencies in `requirements.txt` (`scipy`).
+
 ## [0.9.0] - 2026-01-07
 
 ### Added

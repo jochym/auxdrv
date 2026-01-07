@@ -79,26 +79,25 @@ class TestAlignmentSVD(unittest.TestCase):
         # Reported RMS should be around 1470 arcsec.
         self.assertAlmostEqual(model.rms_error_arcsec, 1470, delta=50)
 
-    def test_pruning(self):
-        """
-        Description:
-            Verifies the FIFO (First-In-First-Out) pruning logic for
-            alignment points.
-
-        Methodology:
-            1. Adds 10 points to the model.
-            2. Calls `prune(5)`.
-
-        Expected Results:
-            - The model must contain exactly 5 points after pruning.
-        """
+    def test_thinning(self):
+        """Test thinning logic."""
         model = AlignmentModel()
+        # Add points close to each other (within 5 deg)
         for i in range(10):
-            model.add_point([1, 0, 0], [1, 0, 0])
+            model.add_point(
+                vector_from_altaz(i * 0.5, 0),
+                vector_from_altaz(i * 0.5, 0),
+                min_dist_deg=5.0,
+            )
 
-        self.assertEqual(len(model.points), 10)
-        model.prune(5)
-        self.assertEqual(len(model.points), 5)
+        # They should keep replacing each other, maintaining count 1
+        self.assertEqual(len(model.points), 1)
+
+        # Add a distant point
+        model.add_point(
+            vector_from_altaz(20, 0), vector_from_altaz(20, 0), min_dist_deg=5.0
+        )
+        self.assertEqual(len(model.points), 2)
 
 
 if __name__ == "__main__":

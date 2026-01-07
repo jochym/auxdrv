@@ -7,6 +7,19 @@ alignment stars.
 
 import math
 import numpy as np
+from scipy.optimize import least_squares
+
+
+def angular_distance(az1, alt1, az2, alt2):
+    """Calculates angular distance between two points in degrees."""
+    r1 = math.radians(alt1)
+    r2 = math.radians(alt2)
+    d_az = math.radians(az1 - az2)
+
+    cos_dist = math.sin(r1) * math.sin(r2) + math.cos(r1) * math.cos(r2) * math.cos(
+        d_az
+    )
+    return math.degrees(math.acos(max(-1.0, min(1.0, cos_dist))))
 
 
 def vector_from_radec(ra_hours, dec_deg):
@@ -63,61 +76,171 @@ def vector_to_altaz(vec):
 
 class AlignmentModel:
     """
-    Manages N-point alignment transformation using SVD-based rotation fitting.
-    Supports weighting and automatic pruning.
+    Manages N-point alignment transformation using a 6-parameter geometric model.
+    Compensates for Rotation, Cone Error, Non-Perpendicularity, and Index Offsets.
     """
 
     def __init__(self):
         self.points = []  # List of dicts: {'sky': vec, 'mount': vec, 'weight': float}
         self.matrix = np.identity(3)
+        self.params = np.zeros(6)  # [roll, pitch, yaw, ID, CH, NP]
         self.rms_error_arcsec = 0.0
 
-    def add_point(self, sky_vec, mount_vec, weight=1.0):
-        """Adds an alignment point and recomputes the transformation."""
-        self.points.append(
-            {"sky": np.array(sky_vec), "mount": np.array(mount_vec), "weight": weight}
-        )
-        self._compute_matrix()
+    def add_point(self, sky_vec, mount_vec, weight=1.0, min_dist_deg=5.0):
+        """
+        Adds an alignment point. If a point exists within min_dist_deg,
+        it is replaced to ensure even sky coverage.
+        """
+        new_az, new_alt = vector_to_altaz(sky_vec)
+        replaced = False
+        for i, p in enumerate(self.points):
+            old_az, old_alt = vector_to_altaz(p["sky"])
+            if angular_distance(new_az, new_alt, old_az, old_alt) < min_dist_deg:
+                self.points[i] = {
+                    "sky": np.array(sky_vec),
+                    "mount": np.array(mount_vec),
+                    "weight": weight,
+                }
+                replaced = True
+                break
+
+        if not replaced:
+            self.points.append(
+                {
+                    "sky": np.array(sky_vec),
+                    "mount": np.array(mount_vec),
+                    "weight": weight,
+                }
+            )
+        self._compute_model()
 
     def clear(self):
         """Clears all alignment points and resets to identity."""
         self.points = []
         self.matrix = np.identity(3)
+        self.params = np.zeros(6)
         self.rms_error_arcsec = 0.0
 
-    def prune(self, max_points):
-        """Removes oldest points to keep the count within limit."""
-        if len(self.points) > max_points:
-            self.points = self.points[-max_points:]
-            self._compute_matrix()
+    def _get_rotation_matrix(self, r, p, y):
+        """Creates a 3D rotation matrix from Euler angles."""
+        # Roll, Pitch, Yaw
+        c1, s1 = math.cos(r), math.sin(r)
+        c2, s2 = math.cos(p), math.sin(p)
+        c3, s3 = math.cos(y), math.sin(y)
 
-    def _compute_matrix(self):
-        """Computes the optimal rotation matrix using SVD."""
-        if len(self.points) < 2:
+        R_x = np.array([[1, 0, 0], [0, c1, -s1], [0, s1, c1]])
+        R_y = np.array([[c2, 0, s2], [0, 1, 0], [-s2, 0, c2]])
+        R_z = np.array([[c3, -s3, 0], [s3, c3, 0], [0, 0, 1]])
+
+        return R_z @ R_y @ R_x
+
+    def _transform_internal(self, sky_vec, params):
+        """Applies the 6-parameter model transformation."""
+        # 1. Rotation
+        R = self._get_rotation_matrix(params[0], params[1], params[2])
+        v = R @ sky_vec
+
+        # 2. Extract Alt/Az
+        az, alt = vector_to_altaz(v)
+        alt_rad = math.radians(alt)
+
+        # 3. Apply mechanical corrections (ID, CH, NP)
+        # All params are in RADIANS for better solver convergence
+        cos_alt = max(0.01, math.cos(alt_rad))
+        tan_alt = math.tan(alt_rad)
+
+        az_corr_rad = params[4] / cos_alt + params[5] * tan_alt
+        alt_corr_rad = params[3]
+
+        return vector_from_altaz(
+            az + math.degrees(az_corr_rad), alt + math.degrees(alt_corr_rad)
+        )
+
+    def _compute_model(self):
+        """Fits the 6-parameter model to the collected points."""
+        if len(self.points) == 0:
             self.matrix = np.identity(3)
+            self.params = np.zeros(6)
             self.rms_error_arcsec = 0.0
             return
 
-        S = np.array([p["sky"] for p in self.points]).T  # 3xN
-        M = np.array([p["mount"] for p in self.points]).T  # 3xN
-        W = np.array([p["weight"] for p in self.points])
+        # Baseline: SVD rotation
+        self._compute_svd_only()
 
-        # Normalize weights
-        W = W / np.sum(W)
+        if len(self.points) < 6:
+            return
 
-        # Weighted covariance matrix H = M * diag(W) * S.T
-        H = (M * W) @ S.T
+        # Refine model using Non-linear Least Squares
+        def residuals(p):
+            res = []
+            for pt in self.points:
+                m_pred = self._transform_internal(pt["sky"], p)
+                dot = np.dot(m_pred, pt["mount"])
+                dot = np.clip(dot, -1.0, 1.0)
+                res.append(math.acos(dot) * pt["weight"])
+            return np.array(res)
 
-        U, _, Vt = np.linalg.svd(H)
-        R = U @ Vt
+        # Initial guess from SVD matrix
+        # Matrix to Euler (using a more robust method)
+        sy = math.sqrt(
+            self.matrix[0, 0] * self.matrix[0, 0]
+            + self.matrix[1, 0] * self.matrix[1, 0]
+        )
+        singular = sy < 1e-6
+        if not singular:
+            r = math.atan2(self.matrix[2, 1], self.matrix[2, 2])
+            p = math.atan2(-self.matrix[2, 0], sy)
+            y = math.atan2(self.matrix[1, 0], self.matrix[0, 0])
+        else:
+            r = math.atan2(-self.matrix[1, 2], self.matrix[1, 1])
+            p = math.atan2(-self.matrix[2, 0], sy)
+            y = 0
 
-        # Check for reflection
-        if np.linalg.det(R) < 0:
-            V = Vt.T.copy()
-            V[:, 2] *= -1
-            R = U @ V.T
+        initial_p = np.array([r, p, y, 0.0, 0.0, 0.0])
 
-        self.matrix = R
+        # Use a robust solver with better tolerance and step size
+        res = least_squares(
+            residuals, initial_p, method="trf", ftol=1e-12, xtol=1e-12, diff_step=1e-4
+        )
+        self.params = res.x
+        self.matrix = self._get_rotation_matrix(
+            self.params[0], self.params[1], self.params[2]
+        )
+        self._calculate_rms()
+
+    def _compute_svd_only(self):
+        """Computes optimal rotation matrix using SVD (fallback)."""
+        if len(self.points) < 1:
+            self.matrix = np.identity(3)
+            return
+
+        if len(self.points) == 1:
+            s = self.points[0]["sky"]
+            m = self.points[0]["mount"]
+            v = np.cross(s, m)
+            sine = np.linalg.norm(v)
+            cosine = np.dot(s, m)
+            if sine < 1e-9:
+                self.matrix = np.identity(3) if cosine > 0 else -np.identity(3)
+            else:
+                v = v / sine
+                K = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+                self.matrix = np.identity(3) + sine * K + (1 - cosine) * (K @ K)
+        else:
+            S = np.array([p["sky"] for p in self.points]).T
+            M = np.array([p["mount"] for p in self.points]).T
+            W = np.array([p["weight"] for p in self.points])
+            W = W / np.sum(W)
+            H = (M * W) @ S.T
+            U, _, Vt = np.linalg.svd(H)
+            R = U @ Vt
+            if np.linalg.det(R) < 0:
+                V = Vt.T.copy()
+                V[:, 2] *= -1
+                R = U @ V.T
+            self.matrix = R
+
+        self.params = np.zeros(6)
         self._calculate_rms()
 
     def _calculate_rms(self):
@@ -128,8 +251,11 @@ class AlignmentModel:
 
         total_sq_error = 0.0
         for p in self.points:
-            pred_mount = self.matrix @ p["sky"]
-            # Angular error between pred_mount and p['mount']
+            if len(self.points) < 6:
+                pred_mount = self.matrix @ p["sky"]
+            else:
+                pred_mount = self._transform_internal(p["sky"], self.params)
+
             dot = np.dot(pred_mount, p["mount"])
             dot = max(-1.0, min(1.0, dot))
             angle_rad = math.acos(dot)
@@ -138,34 +264,40 @@ class AlignmentModel:
         rms_rad = math.sqrt(total_sq_error / len(self.points))
         self.rms_error_arcsec = math.degrees(rms_rad) * 3600.0
 
+    def transform_to_mount(self, sky_vec, target_vec=None, local_bias=0.0):
+        """Applies transformation with optional local weighting."""
+        if len(self.points) < 6:
+            R = self.matrix
+            if target_vec is not None and local_bias > 0:
+                R = self.get_local_matrix(
+                    target_sky_vec=target_vec, local_bias=local_bias
+                )
+            res = R @ np.array(sky_vec)
+            return res.tolist()
+
+        return self._transform_internal(np.array(sky_vec), self.params)
+
+    def transform_to_sky(self, mount_vec):
+        """Applies inverse transformation."""
+        res = self.matrix.T @ np.array(mount_vec)
+        return res.tolist()
+
     def get_local_matrix(self, target_sky_vec, local_bias):
-        """
-        Returns a rotation matrix weighted by proximity to the target vector.
-        local_bias: float from 0.0 to 1.0 (influence of proximity).
-        """
-        if local_bias <= 0 or len(self.points) < 3:
+        """Returns a weighted SVD matrix (Fallback for small point counts)."""
+        if local_bias <= 0 or len(self.points) < 2:
             return self.matrix
 
         target = np.array(target_sky_vec)
-        # Calculate proximity weights: Gaussian centered on target
-        # sigma=0.5 corresponds to roughly 40 degrees spread
         sigma_sq = 0.5
-
         S = np.array([p["sky"] for p in self.points]).T
         M = np.array([p["mount"] for p in self.points]).T
-
-        # Proximity weights
         dots = target @ S
         dist_sq = 2.0 * (1.0 - dots)
         prox_weights = np.exp(-dist_sq / sigma_sq)
-
-        # Combine with original weights
         W = np.array([p["weight"] for p in self.points]) * (
             1.0 + 10.0 * local_bias * prox_weights
         )
         W = W / np.sum(W)
-
-        # Weighted SVD
         H = (M * W) @ S.T
         U, _, Vt = np.linalg.svd(H)
         R = U @ Vt
@@ -174,20 +306,3 @@ class AlignmentModel:
             V[:, 2] *= -1
             R = U @ V.T
         return R
-
-    def transform_to_mount(self, sky_vec, target_vec=None, local_bias=0.0):
-        """
-        Applies transformation. If target_vec and local_bias provided,
-        uses proximity weighting.
-        """
-        R = self.matrix
-        if target_vec is not None and local_bias > 0:
-            R = self.get_local_matrix(target_vec, local_bias)
-
-        res = R @ np.array(sky_vec)
-        return res.tolist()
-
-    def transform_to_sky(self, mount_vec):
-        """Applies inverse transformation to a mount vector to get sky vector."""
-        res = self.matrix.T @ np.array(mount_vec)
-        return res.tolist()

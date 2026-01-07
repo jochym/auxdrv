@@ -17,10 +17,12 @@ A modern INDI driver for Celestron mounts using the AUX protocol, with a built-i
 *   `pyyaml`
 *   `textual`
 *   `rich`
+*   `numpy`
+*   `scipy`
 
 Installation of dependencies:
 ```bash
-pip install indipydriver pyserial-asyncio ephem pyyaml textual rich
+pip install indipydriver pyserial-asyncio ephem pyyaml textual rich numpy scipy
 ```
 
 ## Running

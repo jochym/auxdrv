@@ -1,28 +1,27 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v0.9.0)
+## Current Project Status (v1.0.0)
 
-The project has realized the technical and mathematical foundations needed for telescope control, including an alignment system, safety features, accessory support, non-sidereal tracking, and a high-fidelity simulator.
+The project has achieved its core architectural goals, including high-fidelity mount simulation, advanced multi-point calibration, and non-sidereal tracking.
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
 *   ✅ **Connectivity:** Support for Serial and TCP (simulator).
 *   ✅ **INDI API:** Full compatibility with `indipydriver 3.0.4`.
 *   ✅ **Astronomy:** RA/Dec <-> Encoder transformations, 2nd order prediction, anti-backlash GoTo.
-*   ✅ **Alignment:** Advanced **Multi-Point SVD solver** with RMS reporting and local weighting.
-*   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI, Stellarium support, and tunable mount imperfections (Backlash, PE).
-*   ✅ **Safety & Accessories:** Slew limits, Cord Wrap prevention, Focuser and GPS support.
-*   ✅ **Moving Objects:** Support for Sun, Moon, Planets, and Satellites (TLE).
-*   ✅ **Testing:** 27+ automated tests including **Simulator Core** and **Functional/Safety** suites.
-*   ✅ **Documentation:** Complete English documentation for driver, alignment, and detailed test docstrings.
+*   ✅ **Alignment:** Advanced **6-Parameter Geometric solver** (Rotation, Cone Error, Non-Perpendicularity) with RMS reporting and spatial thinning.
+*   ✅ **Refraction:** Switchable atmospheric refraction correction in the driver.
+*   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI, Stellarium support, and tunable mount imperfections.
+*   ✅ **Testing:** 30+ automated tests covering all subsystems.
+*   ✅ **Documentation:** Complete English documentation for driver, alignment, and test suites.
 
 ---
 
 ## Development Roadmap
 
-### Phase 11: Advanced Calibration & PEC (Planned)
-*   Periodic Error Correction (PEC) support.
-*   Cone error and non-perpendicularity compensation in the driver.
+### Phase 12: Periodic Error Correction (Planned)
+*   Implementation of software and hardware-interfaced PEC.
+*   Persistent storage of calibration data.
 
 ---
 
