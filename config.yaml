@@ -7,3 +7,9 @@ observer:
 simulator:
   aux_port: 2000
   stellarium_port: 10001
+  imperfections:
+    backlash_steps: 50
+    periodic_error_arcsec: 15.0
+    periodic_error_period_sec: 480.0
+    cone_error_arcmin: 5.0
+    encoder_jitter_steps: 2

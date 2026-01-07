@@ -13,13 +13,23 @@ from celestron_indi_driver import (
 
 
 class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
+    """
+    Test suite for safety features and accessory control.
+
+    Verifies that the driver correctly enforces movement limits, handles
+    cord-wrap prevention, and communicates with auxiliary components like
+    Focuser and GPS modules.
+    """
+
     sim_proc = None
     sim_port = 2002
 
     @classmethod
     def setUpClass(cls):
+        """
+        Launches a dedicated simulator instance for safety tests.
+        """
         cls.sim_log = open("test_safety_sim.log", "w")
-        # Use venv python
         cls.sim_proc = subprocess.Popen(
             [
                 "./venv/bin/python",
@@ -36,6 +46,9 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """
+        Terminates the simulator instance.
+        """
         if cls.sim_proc:
             cls.sim_proc.terminate()
             cls.sim_proc.wait()
@@ -43,6 +56,9 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             cls.sim_log.close()
 
     async def asyncSetUp(self):
+        """
+        Connects the driver to the simulator.
+        """
         self.driver = CelestronAUXDriver()
         self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
 
@@ -54,17 +70,32 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         await self.driver.handle_connection(None)
 
     async def asyncTearDown(self):
+        """
+        Disconnects the driver.
+        """
         if self.driver.communicator:
             await self.driver.communicator.disconnect()
 
     async def test_slew_limits(self):
-        """Test if the driver prevents moving outside configured limits."""
+        """
+        Description:
+            Verifies that the driver prevents movement to positions outside the
+            configured Altitude/Azimuth limits.
+
+        Methodology:
+            1. Sets Altitude limits to [0, 45] degrees.
+            2. Attempts a GoTo to 60 degrees.
+            3. Attempts a GoTo to 30 degrees.
+
+        Expected Results:
+            - The GoTo to 60 degrees must return `False` (blocked by driver).
+            - The GoTo to 30 degrees must return `True` (allowed).
+        """
         # Set limits: Alt [0, 45]
         self.driver.alt_limit_min.membervalue = 0
         self.driver.alt_limit_max.membervalue = 45
 
         # Try to GoTo 60 deg Alt
-        # 60 deg = 60/360 * 2^24 = 2796202
         target_alt = int((60.0 / 360.0) * 16777216)
 
         success = await self.driver.goto_position(0, target_alt)
@@ -76,13 +107,24 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(success, "Driver blocked GoTo inside Alt limits")
 
     async def test_focuser_control(self):
-        """Test focuser movement."""
+        """
+        Description:
+            Verifies the control of an external AUX Focuser.
+
+        Methodology:
+            1. Sets a target focuser position in the INDI property.
+            2. Calls the focuser handler.
+            3. Queries the simulator via AUX protocol to verify the physical
+               position change.
+
+        Expected Results:
+            - The simulator's reported focuser position must match the target
+              within 1 step tolerance.
+        """
         target_pos = 500000
         self.driver.focus_pos.membervalue = target_pos
-        # Mocking rxevent for ABS_FOCUS_POSITION
         event = type("obj", (object,), {"vectorname": "ABS_FOCUS_POSITION", "root": []})
 
-        # We need a real-ish event root or just call the handler
         await self.driver.handle_focuser(event)
 
         # Verify simulator position
@@ -90,27 +132,46 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             AUXCommand(AUXCommands.MC_GET_POSITION, AUXTargets.APP, AUXTargets.FOCUS)
         )
         self.assertIsNotNone(resp)
-        sim_pos = int(
-            (resp.get_data_as_int() / 16777216.0) * 16777216
-        )  # Should match target_pos
+        sim_pos = int((resp.get_data_as_int() / 16777216.0) * 16777216)
         self.assertAlmostEqual(sim_pos, target_pos, delta=1)
 
     async def test_gps_refresh(self):
-        """Test GPS data retrieval."""
+        """
+        Description:
+            Verifies location and time retrieval from a simulated GPS module.
+
+        Methodology:
+            1. Triggers a GPS refresh command.
+            2. Calls the GPS refresh handler.
+            3. Verifies that the Latitude and Longitude properties are updated
+               with the simulator's default values.
+
+        Expected Results:
+            - Latitude should be approx 50.1822.
+            - Longitude should be approx 19.7925.
+        """
         self.driver.gps_refresh.membervalue = "On"
         event = type("obj", (object,), {"vectorname": "GPS_REFRESH", "root": []})
         await self.driver.handle_gps_refresh(event)
 
-        # Default simulator GPS: 50d 10' 56" N, 19d 47' 33" E
-        # 50 + 10/60 + 56/3600 = 50.18222
-        # 19 + 47/60 + 33/3600 = 19.7925
         self.assertAlmostEqual(float(self.driver.lat.membervalue), 50.1822, delta=0.001)
         self.assertAlmostEqual(
             float(self.driver.long.membervalue), 19.7925, delta=0.001
         )
 
     async def test_cordwrap_config(self):
-        """Test cordwrap configuration."""
+        """
+        Description:
+            Verifies the configuration of cord-wrap prevention.
+
+        Methodology:
+            1. Enables cord-wrap in the driver.
+            2. Calls the cord-wrap handler.
+            3. Queries the simulator's MC state to verify the feature is active.
+
+        Expected Results:
+            - The simulator must report that cord-wrap protection is enabled (0xFF).
+        """
         self.driver.cordwrap_enable.membervalue = "On"
         event = type("obj", (object,), {"vectorname": "TELESCOPE_CORDWRAP", "root": []})
         await self.driver.handle_cordwrap(event)

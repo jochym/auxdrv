@@ -277,6 +277,12 @@ class SimulatorApp(App):
                 yield Static(id="status-mode")
                 yield Static(id="status-tracking")
                 yield Static(id="status-battery")
+                yield Static("")
+                yield Static("IMPERFECTIONS", classes="panel-title")
+                yield Static(id="imp-backlash")
+                yield Static(id="imp-pe")
+                yield Static(id="imp-cone")
+                yield Static(id="imp-jitter")
 
             with Vertical(id="right-panel"):
                 yield Static("AUX BUS LOG", classes="panel-title")
@@ -356,6 +362,23 @@ class SimulatorApp(App):
         )
         self.query_one("#status-battery").update(f"Battery: [red]{battery}[/red]")
 
+        # Update Imperfections
+        self.query_one("#imp-backlash").update(
+            f"Backlash: [cyan]{self.telescope.backlash_steps}[/cyan] steps"
+        )
+        pe_arcsec = self.telescope.pe_amplitude * 360 * 3600
+        self.query_one("#imp-pe").update(
+            f'Periodic Error: [cyan]{pe_arcsec:.1f}[/cyan]"'
+        )
+        cone_arcmin = self.telescope.cone_error * 360 * 60
+        self.query_one("#imp-cone").update(
+            f"Cone Error: [cyan]{cone_arcmin:.1f}[/cyan]'"
+        )
+        jitter_steps = self.telescope.jitter_sigma * 16777216
+        self.query_one("#imp-jitter").update(
+            f"Jitter: [cyan]{jitter_steps:.1f}[/cyan] steps"
+        )
+
         while self.telescope.cmd_log:
             entry = self.telescope.cmd_log.popleft()
             self.query_one("#aux-log").write_line(
@@ -410,7 +433,7 @@ async def main_async():
     obs.elevation = float(obs_cfg.get("elevation", 400))
     obs.pressure = 0
 
-    telescope = NexStarScope(stdscr=None, tui=False)
+    telescope = NexStarScope(stdscr=None, tui=False, config=config)
 
     asyncio.create_task(broadcast(sport=args.port))
     asyncio.create_task(timer(0.1, telescope))

@@ -8,7 +8,8 @@ It handles motion physics, command processing, and state management.
 
 import struct
 import sys
-from math import pi
+import random
+from math import pi, sin
 import curses
 from collections import deque
 import binascii
@@ -163,10 +164,27 @@ class NexStarScope:
     __hcfw_ver = (5, 28, 5300 // 256, 5300 % 256)
     __mbfw_ver = (1, 0, 0, 1)
 
-    def __init__(self, ALT=0.0, AZM=0.0, tui=True, stdscr=None):
+    def __init__(self, ALT=0.0, AZM=0.0, tui=True, stdscr=None, config=None):
         self.tui = tui
+        self.config = config or {}
         self.alt = ALT
         self.azm = AZM
+
+        # Imperfections state
+        imp = self.config.get("simulator", {}).get("imperfections", {})
+        self.backlash_steps = imp.get("backlash_steps", 0)
+        self.pe_amplitude = imp.get("periodic_error_arcsec", 0.0) / (360.0 * 3600.0)
+        self.pe_period = imp.get("periodic_error_period_sec", 480.0)
+        self.cone_error = imp.get("cone_error_arcmin", 0.0) / (360.0 * 60.0)
+        self.jitter_sigma = imp.get("encoder_jitter_steps", 0) / 16777216.0
+        self.sim_time = 0.0
+
+        # Backlash management
+        self.azm_last_dir = 0  # 1 for pos, -1 for neg
+        self.alt_last_dir = 0
+        self.azm_backlash_rem = 0.0
+        self.alt_backlash_rem = 0.0
+
         self.trg_alt = self.alt
         self.trg_azm = self.azm
         self.alt_rate = 0
@@ -303,8 +321,21 @@ class NexStarScope:
         return b""
 
     def get_position(self, data, snd, rcv):
-        """Returns current MC position as 3-byte fraction."""
-        return pack_int3(self.alt if rcv == 0x11 else self.azm)
+        """Returns current MC position as 3-byte fraction with jitter and cone error."""
+        pos = self.alt if rcv == 0x11 else self.azm
+
+        # Apply imperfections to reported position
+        if rcv == 0x11:  # ALT
+            pos += self.cone_error
+        else:  # AZM
+            # Add periodic error to Azm tracking
+            pos += self.pe_amplitude * sin(2 * pi * self.sim_time / self.pe_period)
+
+        # Add encoder jitter
+        if self.jitter_sigma > 0:
+            pos += random.gauss(0, self.jitter_sigma)
+
+        return pack_int3(pos)
 
     def goto_fast(self, data, snd, rcv):
         """Starts a high-speed GOTO movement."""
@@ -543,16 +574,47 @@ class NexStarScope:
 
     def tick(self, interval):
         """Physical model update called on every timer tick."""
+        self.sim_time += interval
         eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
         maxrate = 4.5 / 360  # Max rate slightly above max GoTo rate
 
-        # Update Altitude with limit enforcement
-        self.alt += (self.alt_rate + self.alt_guiderate) * interval
-        # Limit Alt to configured range
-        self.alt = max(self.alt_min, min(self.alt_max, self.alt))
+        # 1. Update Azm with backlash
+        azm_move = (self.azm_rate + self.azm_guiderate) * interval
+        if abs(azm_move) > 1e-15:
+            move_dir = 1 if azm_move > 0 else -1
+            if move_dir != self.azm_last_dir:
+                self.azm_backlash_rem = float(self.backlash_steps) / 16777216.0
+                self.azm_last_dir = move_dir
 
-        # Update Azimuth (wraps around)
-        self.azm = (self.azm + (self.azm_rate + self.azm_guiderate) * interval) % 1.0
+            if self.azm_backlash_rem > 0:
+                consumed = min(abs(azm_move), self.azm_backlash_rem)
+                self.azm_backlash_rem -= consumed
+                if azm_move > 0:
+                    azm_move = max(0.0, azm_move - consumed)
+                else:
+                    azm_move = min(0.0, azm_move + consumed)
+
+        self.azm = (self.azm + azm_move) % 1.0
+
+        # 2. Update Alt with backlash
+        alt_move = (self.alt_rate + self.alt_guiderate) * interval
+        if abs(alt_move) > 1e-15:
+            move_dir = 1 if alt_move > 0 else -1
+            if move_dir != self.alt_last_dir:
+                self.alt_backlash_rem = float(self.backlash_steps) / 16777216.0
+                self.alt_last_dir = move_dir
+
+            if self.alt_backlash_rem > 0:
+                consumed = min(abs(alt_move), self.alt_backlash_rem)
+                self.alt_backlash_rem -= consumed
+                if alt_move > 0:
+                    alt_move = max(0.0, alt_move - consumed)
+                else:
+                    alt_move = min(0.0, alt_move + consumed)
+
+        self.alt += alt_move
+
+        self.alt = max(self.alt_min, min(self.alt_max, self.alt))
 
         if self.slewing and self.goto:
             for axis in ["azm", "alt"]:

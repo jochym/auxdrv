@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 9 - Advanced Calibration & PEC
+- **Current Phase**: Phase 11 - Advanced Calibration & PEC
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -22,16 +22,19 @@
 - **Phase 6**: Safety & Accessories
 - **Phase 7**: Moving Objects Support
 - **Phase 8**: Multi-Point SVD Alignment
-  - Implemented SVD-based rotation fitting for any number of points.
-  - Added RMS Error calculation and reporting.
-  - Implemented Proximity Weighting (Local Bias) for high-precision local tracking.
-  - Added Automatic Pruning (Circular Buffer) for long sessions.
-  - Created comprehensive English documentation for Driver, Alignment, and Simulator.
+- **Phase 9**: Full Test Documentation
+  - Structured Google-style docstrings for all 23+ tests.
+  - Detailed descriptions of methodology and expected results.
+- **Phase 10**: Simulator Imperfections
+  - Added Mechanical Backlash, Periodic Error, Cone Error, and Encoder Jitter.
+  - Configurable via `config.yaml`.
+  - Displayed active imperfections in the TUI.
+  - Created `tests/test_simulator_core.py` for physics verification.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 9**: Advanced Calibration & PEC
-  - Planning Periodic Error Correction (PEC) and cone error compensation.
+- **Phase 11**: Advanced Calibration & PEC
+  - Planning Periodic Error Correction (PEC) and cone error compensation in the driver.
 
 ### Pending Tasks 📋
 1. Implement Periodic Error Correction (PEC)

@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-01-07
+
+### Added
+- **Phase 9: Comprehensive Test Documentation**: Added detailed Google-style docstrings to all 23+ tests, documenting methodology and expected results.
+- **Phase 10: Simulator Realism**: Added tunable imperfections to the NSE Simulator:
+  - **Mechanical Backlash**: Simulates gear play when reversing.
+  - **Periodic Error (PE)**: Sinusoidal tracking error in RA/Azimuth.
+  - **Cone Error**: Mechanical offset in Altitude axis.
+  - **Encoder Jitter**: Random Gaussian noise in position reporting.
+- **Simulator Core Test Suite**: Added `tests/test_simulator_core.py` to verify simulator physics and protocol compliance.
+- New TUI Panel: Displays active imperfections in the simulator interface.
+
+### Changed
+- Improved `config.yaml` to support simulator-specific settings.
+- Refactored `NexStarScope` to support simulation of mechanical errors.
+
 ## [0.8.0] - 2026-01-07
 
 ### Added

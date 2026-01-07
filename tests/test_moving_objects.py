@@ -9,11 +9,21 @@ from celestron_indi_driver import CelestronAUXDriver, AUXTargets
 
 
 class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
+    """
+    Verification of non-sidereal tracking capabilities.
+
+    Verifies that the driver can calculate positions and tracking rates for
+    Solar System objects (Moon) and Satellites (TLE).
+    """
+
     sim_proc = None
     sim_port = 2002
 
     @classmethod
     def setUpClass(cls):
+        """
+        Launches a simulator instance for moving object tests.
+        """
         cls.sim_log = open("test_moving_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
@@ -31,6 +41,9 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def tearDownClass(cls):
+        """
+        Terminates the simulator instance.
+        """
         if cls.sim_proc:
             cls.sim_proc.terminate()
             cls.sim_proc.wait()
@@ -38,32 +51,46 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
             cls.sim_log.close()
 
     async def asyncSetUp(self):
+        """
+        Initializes driver and connects to simulator.
+        """
         self.driver = CelestronAUXDriver()
         self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
 
-        # Mock INDI send
         async def mock_send(xmldata):
             pass
 
         self.driver.send = mock_send
-
-        # Connect (Assumes simulator is running on 2001)
         self.driver.conn_connect.membervalue = "On"
         await self.driver.handle_connection(None)
 
     async def asyncTearDown(self):
+        """
+        Disconnects the driver.
+        """
         if self.driver.communicator:
             await self.driver.communicator.disconnect()
 
     async def test_moon_goto(self):
-        """Test GoTo Moon functionality."""
+        """
+        Description:
+            Verifies the ability to perform a GoTo to the Moon.
+
+        Methodology:
+            1. Selects "Moon" as the target type.
+            2. Calculates current Moon RA/Dec using `ephem`.
+            3. Triggers GoTo via `handle_equatorial_goto`.
+            4. Waits for completion and verifies reported position.
+
+        Expected Results:
+            - The telescope must reach the Moon's coordinates within 0.1 deg accuracy.
+        """
         # 1. Select Moon
         for name in self.driver.target_type_vector:
             self.driver.target_type_vector[name] = "Off"
         self.driver.target_type_vector["MOON"] = "On"
 
         # 2. Get Moon JNow coords
-
         ra_moon, dec_moon = await self.driver._get_target_equatorial()
 
         # 3. Trigger GoTo
@@ -72,7 +99,7 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         # 4. Wait for idle
         from tests.test_functional import TestCelestronAUXFunctional
 
-        # We need wait_for_idle from there or re-implement
+        # Inline wait loop
         for _ in range(60):
             await self.driver.read_mount_position()
             if self.driver.slewing_light.membervalue == "Idle":
@@ -88,9 +115,18 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(dec, dec_moon, delta=0.1)
 
     async def test_moon_tracking_rate(self):
-        """Verify that Moon tracking rate differs from sidereal."""
-        # Sidereal rate is approx 15 arcsec/sec in RA
+        """
+        Description:
+            Verifies that Moon tracking rate is different from the sidereal rate.
 
+        Methodology:
+            1. Enables sidereal tracking and captures the guide rate commands sent to MC.
+            2. Switches to Moon tracking and captures the new guide rate commands.
+            3. Compares the raw AUX packets.
+
+        Expected Results:
+            - The binary packets for sidereal and lunar tracking rates must differ.
+        """
         # 1. Set Sidereal tracking
         for name in self.driver.target_type_vector:
             self.driver.target_type_vector[name] = "Off"
@@ -98,7 +134,7 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
 
         for name in self.driver.track_mode_vector:
             self.driver.track_mode_vector[name] = "Off"
-        self.driver.track_mode_vector["TRACK_SIDEREAL"] = "On"
+        self.driver.track_sidereal.membervalue = "On"
 
         await self.driver.handle_track_mode(None)
         await asyncio.sleep(2)
@@ -136,11 +172,22 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(sidereal_cmds, moon_cmds)
 
     async def test_satellite_tracking(self):
-        """Verify that Satellite tracking works with TLE."""
-        # 1. Set Satellite TLE (ISS)
-        # Using a date near the TLE epoch to ensure it's above horizon/calculable
-        # ISS TLE from the code: epoch 26006.88541667 (Jan 6, 2026)
+        """
+        Description:
+            Verifies satellite tracking using Two-Line Element (TLE) data.
 
+        Methodology:
+            1. Sets TLE for the ISS.
+            2. Selects "Satellite" as the target type.
+            3. Enables tracking.
+            4. Intercepts and verifies that guide rates are sent to the mount.
+
+        Expected Results:
+            - The driver must send non-zero guide rate updates.
+            - Rates for a LEO satellite (ISS) should be significantly higher
+               than sidereal rates.
+        """
+        # 1. Set Satellite TLE (ISS)
         self.driver.tle_name.membervalue = "ISS"
         self.driver.tle_line1.membervalue = (
             "1 25544U 98067A   26006.88541667  .00000000  00000-0  00000-0 0    01"
@@ -157,9 +204,7 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         # Start tracking
         for name in self.driver.track_mode_vector:
             self.driver.track_mode_vector[name] = "Off"
-        self.driver.track_sidereal.membervalue = (
-            "On"  # Any tracking mode except TRACK_OFF starts the loop
-        )
+        self.driver.track_sidereal.membervalue = "On"
 
         await self.driver.handle_track_mode(None)
 
@@ -181,8 +226,6 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         ]
 
         self.assertGreater(len(sat_cmds), 0)
-        # Satellite rates should be much higher than sidereal
-        # Sidereal is ~15"/s. ISS is ~1 deg/s = 3600"/s.
 
         # Stop tracking
         self.driver.track_none.membervalue = "On"
