@@ -140,6 +140,7 @@ class CelestronAUXDriver(IPyDriver):
                 self.tle_data_vector,
                 self.refraction_vector,
                 self.calibration_params_vector,
+                self.abort_motion_vector,
             ],
         )
 
@@ -629,6 +630,18 @@ class CelestronAUXDriver(IPyDriver):
             [self.tle_name, self.tle_line1, self.tle_line2],
         )
 
+        # Abort Motion
+        self.abort_motion = SwitchMember("ABORT", "Abort", "Off")
+        self.abort_motion_vector = SwitchVector(
+            "TELESCOPE_ABORT_MOTION",
+            "Abort Motion",
+            "Main",
+            "rw",
+            "AtMostOne",
+            "Idle",
+            [self.abort_motion],
+        )
+
         # Refraction Correction
         self.refraction_on = SwitchMember("ENABLED", "Enabled", "Off")
         self.refraction_off = SwitchMember("DISABLED", "Disabled", "On")
@@ -746,11 +759,35 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "REFRACTION_CORRECTION":
             self.refraction_vector.update(event.root)
             await self.refraction_vector.send_setVector(state="Ok")
+        elif event.vectorname == "TELESCOPE_ABORT_MOTION":
+            await self.handle_abort_motion(event)
 
     async def handle_limits(self, event):
         """Updates internal slew limits."""
         self.limits_vector.update(event.root)
         await self.limits_vector.send_setVector(state="Ok")
+
+    async def handle_abort_motion(self, event):
+        """Immediately stops all mount movement."""
+        if event and event.root:
+            self.abort_motion_vector.update(event.root)
+        if self.abort_motion.membervalue == "On":
+            if self.communicator and self.communicator.connected:
+                # Send Rate 0 to both axes
+                await self.slew_by_rate(AUXTargets.AZM, 0, 1)
+                await self.slew_by_rate(AUXTargets.ALT, 0, 1)
+
+            # Cancel tracking if active
+            if self._tracking_task:
+                self._tracking_task.cancel()
+                self._tracking_task = None
+                self.tracking_light.membervalue = "Idle"
+
+            self.slewing_light.membervalue = "Idle"
+            await self.mount_status_vector.send_setVector()
+
+            self.abort_motion.membervalue = "Off"
+            await self.abort_motion_vector.send_setVector(state="Ok")
 
     async def handle_cordwrap(self, event):
         """Enables or disables cord wrap prevention on the mount."""

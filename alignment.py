@@ -86,32 +86,61 @@ class AlignmentModel:
         self.params = np.zeros(6)  # [roll, pitch, yaw, ID, CH, NP]
         self.rms_error_arcsec = 0.0
 
-    def add_point(self, sky_vec, mount_vec, weight=1.0, min_dist_deg=5.0):
+    def add_point(
+        self, sky_vec, mount_vec, weight=1.0, sector_size=15.0, max_per_sector=2
+    ):
         """
-        Adds an alignment point. If a point exists within min_dist_deg,
-        it is replaced to ensure even sky coverage.
+        Adds an alignment point using Residual-Aware Grid Thinning.
+        Ensures even sky coverage by managing points in angular sectors.
         """
         new_az, new_alt = vector_to_altaz(sky_vec)
-        replaced = False
-        for i, p in enumerate(self.points):
-            old_az, old_alt = vector_to_altaz(p["sky"])
-            if angular_distance(new_az, new_alt, old_az, old_alt) < min_dist_deg:
-                self.points[i] = {
-                    "sky": np.array(sky_vec),
-                    "mount": np.array(mount_vec),
-                    "weight": weight,
-                }
-                replaced = True
-                break
 
-        if not replaced:
-            self.points.append(
-                {
-                    "sky": np.array(sky_vec),
-                    "mount": np.array(mount_vec),
-                    "weight": weight,
-                }
-            )
+        # Determine sector ID
+        s_az = int(new_az / sector_size)
+        s_alt = int((new_alt + 90.0) / sector_size)
+        sector_id = (s_az, s_alt)
+
+        # Find points in the same sector
+        sector_indices = []
+        for i, p in enumerate(self.points):
+            p_az, p_alt = vector_to_altaz(p["sky"])
+            if (
+                int(p_az / sector_size),
+                int((p_alt + 90.0) / sector_size),
+            ) == sector_id:
+                sector_indices.append(i)
+
+        new_pt = {
+            "sky": np.array(sky_vec),
+            "mount": np.array(mount_vec),
+            "weight": weight,
+        }
+
+        if len(sector_indices) < max_per_sector:
+            self.points.append(new_pt)
+        else:
+            # Sector is full. Evaluate residuals and drop the worst point.
+            # We compare existing points in sector + the new point.
+            candidates = [self.points[idx] for idx in sector_indices] + [new_pt]
+            residuals = []
+            for pt in candidates:
+                # Use current model to evaluate consistency
+                if len(self.points) < 6:
+                    m_pred = self.matrix @ pt["sky"]
+                else:
+                    m_pred = self._transform_internal(pt["sky"], self.params)
+
+                dot = np.dot(m_pred, pt["mount"])
+                dot = np.clip(dot, -1.0, 1.0)
+                residuals.append(math.acos(dot))
+
+            worst_local_idx = np.argmax(residuals)
+
+            if worst_local_idx < max_per_sector:
+                # One of the existing points is worse than the new one
+                self.points[sector_indices[worst_local_idx]] = new_pt
+            # else: the new point is the worst in its sector, so we ignore it.
+
         self._compute_model()
 
     def clear(self):

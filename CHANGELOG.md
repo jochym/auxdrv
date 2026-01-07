@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-01-07
+
+### Added
+- **Hardware Interaction Test (HIT)**: Interactive safety routine for physical mount testing (`scripts/hit_validation.py`).
+- **Photography & Pointing Test (PPT)**: Automated accuracy measurement using INDI and ASTAP (`scripts/ppt_accuracy.py`).
+- **Emergency Abort**: Support for `TELESCOPE_ABORT_MOTION` in the driver.
+- **Residual-Aware Grid Thinning**: Improved alignment point management using consistency-weighted grid sectors.
+
+### Changed
+- Updated `AlignmentModel` to use 15° grid sectors for better sky coverage.
+- Optimized functional tests for robustness against encoder jitter.
+
 ## [1.0.0] - 2026-01-07
 
 ### Added

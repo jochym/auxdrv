@@ -33,11 +33,11 @@ class TestAdvancedAlignment(unittest.TestCase):
         # Add another point 1 degree away
         s2 = vector_from_altaz(1, 0)
         m2 = vector_from_altaz(1, 0)
-        model.add_point(s2, m2, min_dist_deg=5.0)
+        model.add_point(s2, m2, sector_size=15.0, max_per_sector=1)
 
         # Should have replaced first point or kept only one if they are too close
-        # My implementation replaces.
         self.assertEqual(len(model.points), 1)
+
         az, alt = vector_to_altaz(model.points[0]["sky"])
         self.assertAlmostEqual(az, 1.0)
 

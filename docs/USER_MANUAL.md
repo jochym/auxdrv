@@ -2,6 +2,25 @@
 
 This driver provides full control over Celestron telescope mounts using the AUX binary protocol. It is compatible with INDI-enabled clients like KStars, Ekos, and Stellarium.
 
+## Hardware Validation
+
+Before using the driver for the first time with real hardware, it is highly recommended to run the interactive validation routines:
+
+### Hardware Interaction Test (HIT)
+Verifies safe movement and bus communication.
+```bash
+python scripts/hit_validation.py
+```
+*Follow the on-screen instructions. Press **Space** at any time for an emergency stop.*
+
+### Photography & Pointing Test (PPT)
+Automates pointing error measurement using a camera and plate solver (requires ASTAP).
+```bash
+python scripts/ppt_accuracy.py
+```
+
+---
+
 ## Installation
 
 1.  Ensure you have Python 3.8+ installed.

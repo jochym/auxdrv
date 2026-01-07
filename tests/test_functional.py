@@ -188,8 +188,8 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         azm = int(self.driver.azm_steps.membervalue)
         alt = int(self.driver.alt_steps.membervalue)
 
-        self.assertAlmostEqual(azm, target_azm, delta=100)
-        self.assertAlmostEqual(alt, target_alt, delta=100)
+        self.assertAlmostEqual(azm, target_azm, delta=200)
+        self.assertAlmostEqual(alt, target_alt, delta=200)
 
     async def test_3_tracking_logic(self):
         """

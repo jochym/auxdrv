@@ -82,22 +82,23 @@ class TestAlignmentSVD(unittest.TestCase):
     def test_thinning(self):
         """Test thinning logic."""
         model = AlignmentModel()
-        # Add points close to each other (within 5 deg)
+        # Add points close to each other (within 15 deg sector)
         for i in range(10):
             model.add_point(
                 vector_from_altaz(i * 0.5, 0),
                 vector_from_altaz(i * 0.5, 0),
-                min_dist_deg=5.0,
+                sector_size=15.0,
+                max_per_sector=2,
             )
 
-        # They should keep replacing each other, maintaining count 1
-        self.assertEqual(len(model.points), 1)
+        # They should fit into one or two sectors.
+        # (0..4.5) is within one sector (0..15).
+        # max_per_sector=2, so we should have 2 points.
+        self.assertEqual(len(model.points), 2)
 
         # Add a distant point
-        model.add_point(
-            vector_from_altaz(20, 0), vector_from_altaz(20, 0), min_dist_deg=5.0
-        )
-        self.assertEqual(len(model.points), 2)
+        model.add_point(vector_from_altaz(20, 0), vector_from_altaz(20, 0))
+        self.assertEqual(len(model.points), 3)
 
 
 if __name__ == "__main__":

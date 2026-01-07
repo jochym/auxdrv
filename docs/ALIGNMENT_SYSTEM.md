@@ -25,7 +25,14 @@ $$\text{minimize} \sum w_i \| R s_i - m_i \|^2$$
 ### 2. Multi-Point Refinement
 You can continue adding points throughout your session. For example, after every plate solve, performing a `Sync` will refine the model further.
 
-### 3. Advanced Configuration
+### 3. Residual-Aware Grid Thinning
+To ensure even sky coverage and maintain model stability, the driver employs a grid-based thinning algorithm:
+- The sky is divided into **15° x 15° sectors**.
+- Each sector holds a maximum of **2 points**.
+- If a sector is full, the driver evaluates the mathematical consistency (residuals) of all points in that sector and keeps only the two most reliable ones.
+- This prevents local "clouds" of data (e.g., from repeated centering in one area) from overpowering the global calibration while preserving data from other parts of the sky.
+
+### 4. Advanced Configuration
 Located in the **Alignment** tab:
 - **Max Points**: Limits the number of points in the model (Circular Buffer). Default is 50.
 - **Auto Prune**: If enabled, the oldest point is removed when `Max Points` is reached.
