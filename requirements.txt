@@ -1,0 +1,7 @@
+ephem>=4.2
+indipydriver>=3.0.4
+pyserial>=3.5
+pyserial-asyncio>=0.6
+textual>=1.0.0
+numpy>=1.24.0
+pytest>=8.0.0

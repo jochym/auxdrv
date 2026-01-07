@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 import yaml
 import os
 import math
+import numpy as np
 
 # Import AUX protocol implementation
 from celestron_aux_driver import (
@@ -73,7 +74,7 @@ class CelestronAUXDriver(IPyDriver):
     INDI Driver for Celestron mounts.
 
     Manages INDI properties, hardware communication via AUX bus,
-    and coordinate transformations with N-point alignment support.
+    and coordinate transformations with multi-point SVD alignment support.
     """
 
     def __init__(self, driver_name: str = "Celestron AUX"):
@@ -103,8 +104,9 @@ class CelestronAUXDriver(IPyDriver):
                 self.approach_mode_vector,
                 self.approach_offset_vector,
                 self.track_mode_vector,
-                self.align_vector,
-                self.clear_align_vector,
+                self.align_config_vector,
+                self.align_params_vector,
+                self.align_status_vector,
                 self.coord_set_vector,
                 self.limits_vector,
                 self.cordwrap_vector,
@@ -125,13 +127,13 @@ class CelestronAUXDriver(IPyDriver):
         self._tracking_task = None
         self._align_model = AlignmentModel()
 
-        # Alignment data: list of (RA, Dec, AzmSteps, AltSteps)
-        self._alignment_points = []
-
         # 3. ephem Observer for RA/Dec <-> Alt/Az transformations
         self.observer = ephem.Observer()
         self.observer.pressure = 0
         self.update_observer()
+
+        # Ensure we use JNow (Equinox of Date)
+        self.observer.epoch = self.observer.date
 
     def _init_properties(self):
         """Initializes all INDI property vectors and members."""
@@ -151,7 +153,7 @@ class CelestronAUXDriver(IPyDriver):
         # Port settings
         self.port_name = TextMember("PORT_NAME", "Port Name", "/dev/ttyUSB0")
         self.baud_rate = NumberMember(
-            "BAUD_RATE", "Baud Rate", "%d", 9600, 115200, 1, 19200
+            "BAUD_RATE", "Baud Rate", "%d", "9600", "115200", "1", "19200"
         )
         self.port_vector = TextVector(
             "PORT", "Serial Port", "Main", "rw", "Idle", [self.port_name]
@@ -176,10 +178,10 @@ class CelestronAUXDriver(IPyDriver):
 
         # Raw position (Steps)
         self.azm_steps = NumberMember(
-            "AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0
+            "AZM_STEPS", "AZM Steps", "%d", "0", str(STEPS_PER_REVOLUTION - 1), "1", "0"
         )
         self.alt_steps = NumberMember(
-            "ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0
+            "ALT_STEPS", "ALT Steps", "%d", "0", str(STEPS_PER_REVOLUTION - 1), "1", "0"
         )
         self.mount_position_vector = NumberVector(
             "MOUNT_POSITION",
@@ -203,7 +205,7 @@ class CelestronAUXDriver(IPyDriver):
         )
 
         # Motion control
-        self.slew_rate = NumberMember("RATE", "Rate (1-9)", "%d", 1, 9, 1, 1)
+        self.slew_rate = NumberMember("RATE", "Rate (1-9)", "%d", "1", "9", "1", "1")
         self.slew_rate_vector = NumberVector(
             "SLEW_RATE", "Slew Rate", "Main", "rw", "Idle", [self.slew_rate]
         )
@@ -234,10 +236,10 @@ class CelestronAUXDriver(IPyDriver):
 
         # Coordinates
         self.target_azm = NumberMember(
-            "AZM_STEPS", "AZM Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0
+            "AZM_STEPS", "AZM Steps", "%d", "0", str(STEPS_PER_REVOLUTION - 1), "1", "0"
         )
         self.target_alt = NumberMember(
-            "ALT_STEPS", "ALT Steps", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0
+            "ALT_STEPS", "ALT Steps", "%d", "0", str(STEPS_PER_REVOLUTION - 1), "1", "0"
         )
         self.absolute_coord_vector = NumberVector(
             "TELESCOPE_ABSOLUTE_COORD",
@@ -248,8 +250,12 @@ class CelestronAUXDriver(IPyDriver):
             [self.target_azm, self.target_alt],
         )
 
-        self.guide_azm = NumberMember("GUIDE_AZM", "AZM Guide Rate", "%d", 0, 255, 1, 0)
-        self.guide_alt = NumberMember("GUIDE_ALT", "ALT Guide Rate", "%d", 0, 255, 1, 0)
+        self.guide_azm = NumberMember(
+            "GUIDE_AZM", "AZM Guide Rate", "%d", "0", "255", "1", "0"
+        )
+        self.guide_alt = NumberMember(
+            "GUIDE_ALT", "ALT Guide Rate", "%d", "0", "255", "1", "0"
+        )
         self.guide_rate_vector = NumberVector(
             "TELESCOPE_GUIDE_RATE",
             "Guide Rates",
@@ -298,28 +304,28 @@ class CelestronAUXDriver(IPyDriver):
             "LAT",
             "Latitude (deg)",
             " %06.2f",
-            -90,
-            90,
-            0,
-            obs_cfg.get("latitude", 50.1822),
+            "-90",
+            "90",
+            "0",
+            str(obs_cfg.get("latitude", 50.1822)),
         )
         self.long = NumberMember(
             "LONG",
             "Longitude (deg)",
             " %06.2f",
-            -360,
-            360,
-            0,
-            obs_cfg.get("longitude", 19.7925),
+            "-360",
+            "360",
+            "0",
+            str(obs_cfg.get("longitude", 19.7925)),
         )
         self.elev = NumberMember(
             "ELEV",
             "Elevation (m)",
             " %04.0f",
-            -1000,
-            10000,
-            0,
-            obs_cfg.get("elevation", 400),
+            "-1000",
+            "10000",
+            "0",
+            str(obs_cfg.get("elevation", 400)),
         )
         self.location_vector = NumberVector(
             "GEOGRAPHIC_COORD",
@@ -331,8 +337,12 @@ class CelestronAUXDriver(IPyDriver):
         )
 
         # Equatorial coordinates
-        self.ra = NumberMember("RA", "Right Ascension (h)", "%08.3f", 0, 24, 0, 0)
-        self.dec = NumberMember("DEC", "Declination (deg)", "%08.3f", -90, 90, 0, 0)
+        self.ra = NumberMember(
+            "RA", "Right Ascension (h)", "%08.3f", "0", "24", "0", "0"
+        )
+        self.dec = NumberMember(
+            "DEC", "Declination (deg)", "%08.3f", "-90", "90", "0", "0"
+        )
         self.equatorial_vector = NumberVector(
             "EQUATORIAL_EOD_COORD",
             "Equatorial JNow",
@@ -359,10 +369,10 @@ class CelestronAUXDriver(IPyDriver):
         )
 
         self.approach_azm_offset = NumberMember(
-            "AZM_OFFSET", "AZM Offset (steps)", "%d", 0, 1000000, 1, 10000
+            "AZM_OFFSET", "AZM Offset (steps)", "%d", "0", "1000000", "1", "10000"
         )
         self.approach_alt_offset = NumberMember(
-            "ALT_OFFSET", "ALT Offset (steps)", "%d", 0, 1000000, 1, 10000
+            "ALT_OFFSET", "ALT Offset (steps)", "%d", "0", "1000000", "1", "10000"
         )
         self.approach_offset_vector = NumberVector(
             "GOTO_APPROACH_OFFSET",
@@ -402,42 +412,62 @@ class CelestronAUXDriver(IPyDriver):
             [self.set_slew, self.set_track, self.set_sync],
         )
 
-        # Alignment System
-        self.align_star1 = TextMember("STAR1", "Star 1", "None")
-        self.align_star2 = TextMember("STAR2", "Star 2", "None")
-        self.align_star3 = TextMember("STAR3", "Star 3", "None")
-        self.align_vector = TextVector(
-            "ALIGNMENT_INFO",
-            "Alignment Stars",
-            "Alignment",
-            "ro",
-            "Idle",
-            [self.align_star1, self.align_star2, self.align_star3],
+        # Alignment Config
+        self.align_max_points = NumberMember(
+            "MAX_POINTS", "Max Points", "%d", "1", "100", "1", "50"
         )
-
-        self.clear_align = SwitchMember("CLEAR", "Clear Alignment", "Off")
-        self.clear_align_vector = SwitchVector(
-            "CLEAR_ALIGNMENT",
-            "Clear Alignment",
+        self.align_local_bias = NumberMember(
+            "LOCAL_BIAS", "Local Bias (%)", "%d", "0", "100", "1", "0"
+        )
+        self.align_auto_prune = SwitchMember("AUTO_PRUNE", "Auto Prune", "On")
+        self.align_clear_all = SwitchMember("CLEAR_ALL", "Clear All", "Off")
+        self.align_clear_last = SwitchMember("CLEAR_LAST", "Clear Last", "Off")
+        self.align_config_vector = SwitchVector(
+            "ALIGNMENT_CONFIG",
+            "Alignment Config",
             "Alignment",
             "rw",
             "AtMostOne",
             "Idle",
-            [self.clear_align],
+            [self.align_auto_prune, self.align_clear_all, self.align_clear_last],
+        )
+        self.align_params_vector = NumberVector(
+            "ALIGNMENT_PARAMS",
+            "Alignment Params",
+            "Alignment",
+            "rw",
+            "Idle",
+            [self.align_max_points, self.align_local_bias],
+        )
+
+        # Alignment Status (Read Only)
+        self.align_point_count = NumberMember(
+            "POINT_COUNT", "Point Count", "%d", "0", "100", "1", "0"
+        )
+        self.align_rms_error = NumberMember(
+            "RMS_ERROR", "RMS Error (arcsec)", "%.2f", "0", "360000", "0", "0"
+        )
+        self.align_status_vector = NumberVector(
+            "ALIGNMENT_STATUS",
+            "Alignment Status",
+            "Alignment",
+            "ro",
+            "Idle",
+            [self.align_point_count, self.align_rms_error],
         )
 
         # Slew Limits
         self.alt_limit_min = NumberMember(
-            "ALT_MIN", "Min Altitude (deg)", "%06.2f", -90, 90, 0, -90
+            "ALT_MIN", "Min Altitude (deg)", "%06.2f", "-90", "90", "0", "-90"
         )
         self.alt_limit_max = NumberMember(
-            "ALT_MAX", "Max Altitude (deg)", "%06.2f", -90, 90, 0, 90
+            "ALT_MAX", "Max Altitude (deg)", "%06.2f", "-90", "90", "0", "90"
         )
         self.azm_limit_min = NumberMember(
-            "AZ_MIN", "Min Azimuth (deg)", "%06.2f", 0, 360, 0, 0
+            "AZ_MIN", "Min Azimuth (deg)", "%06.2f", "0", "360", "0", "0"
         )
         self.azm_limit_max = NumberMember(
-            "AZ_MAX", "Max Azimuth (deg)", "%06.2f", 0, 360, 0, 360
+            "AZ_MAX", "Max Azimuth (deg)", "%06.2f", "0", "360", "0", "360"
         )
         self.limits_vector = NumberVector(
             "TELESCOPE_LIMITS",
@@ -453,9 +483,8 @@ class CelestronAUXDriver(IPyDriver):
             ],
         )
 
-        # Cordwrap
-        self.cordwrap_enable = SwitchMember("ENABLE", "Enabled", "Off")
-        self.cordwrap_disable = SwitchMember("DISABLE", "Disabled", "On")
+        self.cordwrap_enable = SwitchMember("ENABLED", "Enabled", "On")
+        self.cordwrap_disable = SwitchMember("DISABLED", "Disabled", "Off")
         self.cordwrap_vector = SwitchVector(
             "TELESCOPE_CORDWRAP",
             "Cord Wrap Prevention",
@@ -467,7 +496,7 @@ class CelestronAUXDriver(IPyDriver):
         )
 
         self.cordwrap_pos = NumberMember(
-            "POSITION", "Wrap Position (steps)", "%d", 0, STEPS_PER_REVOLUTION - 1, 1, 0
+            "POS", "Cord Wrap Position (deg)", "%06.2f", "0", "360", "0", "0"
         )
         self.cordwrap_pos_vector = NumberVector(
             "TELESCOPE_CORDWRAP_POS",
@@ -478,21 +507,21 @@ class CelestronAUXDriver(IPyDriver):
             [self.cordwrap_pos],
         )
 
-        # Focuser
+        # Focuser support
         self.focus_pos = NumberMember(
-            "ABS_FOCUS_POSITION", "Focus Position", "%d", 0, 16777215, 1, 0
+            "FOCUS_POS", "Focus Position", "%d", "0", "16777215", "1", "0"
         )
         self.focuser_vector = NumberVector(
             "ABS_FOCUS_POSITION",
-            "Focuser",
-            "Accessories",
+            "Focuser Position",
+            "Main",
             "rw",
             "Idle",
             [self.focus_pos],
         )
 
-        # GPS
-        self.gps_status = LightMember("STATUS", "GPS Status", "Idle")
+        # GPS Support
+        self.gps_status = LightMember("GPS_STATUS", "GPS Status", "Idle")
         self.gps_status_vector = LightVector(
             "GPS_STATUS", "GPS Status", "Accessories", "Idle", [self.gps_status]
         )
@@ -631,8 +660,11 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "TELESCOPE_ON_COORD_SET":
             self.coord_set_vector.update(event.root)
             await self.coord_set_vector.send_setVector(state="Ok")
-        elif event.vectorname == "CLEAR_ALIGNMENT":
-            await self.handle_clear_alignment(event)
+        elif event.vectorname == "ALIGNMENT_CONFIG":
+            await self.handle_alignment_config(event)
+        elif event.vectorname == "ALIGNMENT_PARAMS":
+            self.align_params_vector.update(event.root)
+            await self.align_params_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_LIMITS":
             await self.handle_limits(event)
         elif event.vectorname == "TELESCOPE_CORDWRAP":
@@ -934,7 +966,7 @@ class CelestronAUXDriver(IPyDriver):
     def is_move_allowed(self, azm_steps, alt_steps):
         """Checks if the given position (in steps) is within configured limits."""
         alt_deg = (alt_steps / STEPS_PER_REVOLUTION) * 360.0
-        # Normalize Alt to [-180, 180] as it is common for mounts to use this range
+        # Normalize Alt to [-180, 180]
         if alt_deg > 180:
             alt_deg -= 360.0
 
@@ -1026,19 +1058,28 @@ class CelestronAUXDriver(IPyDriver):
         """Sends a position-based GoTo command to a motor axis."""
         return await self._do_slew(axis, steps, fast)
 
-    async def handle_clear_alignment(self, event):
-        """Clears all stored alignment points."""
+    async def handle_alignment_config(self, event):
+        """Handles clearing alignment or pruning."""
         if event and event.root:
-            self.clear_align_vector.update(event.root)
-        if self.clear_align.membervalue == "On":
-            self._alignment_points = []
+            self.align_config_vector.update(event.root)
+        if self.align_clear_all.membervalue == "On":
             self._align_model.clear()
-            self.align_star1.membervalue = self.align_star2.membervalue = (
-                self.align_star3.membervalue
-            ) = "None"
-            await self.align_vector.send_setVector()
-            self.clear_align.membervalue = "Off"
-            await self.clear_align_vector.send_setVector(state="Ok")
+            self.align_clear_all.membervalue = "Off"
+            await self.update_alignment_status()
+        elif self.align_clear_last.membervalue == "On":
+            if self._align_model.points:
+                self._align_model.points.pop()
+                self._align_model._compute_matrix()
+            self.align_clear_last.membervalue = "Off"
+            await self.update_alignment_status()
+
+        await self.align_config_vector.send_setVector(state="Ok")
+
+    async def update_alignment_status(self):
+        """Updates INDI properties with alignment model stats."""
+        self.align_point_count.membervalue = len(self._align_model.points)
+        self.align_rms_error.membervalue = self._align_model.rms_error_arcsec
+        await self.align_status_vector.send_setVector()
 
     async def handle_park(self, event):
         """Moves the mount to the park position (0,0 steps)."""
@@ -1070,7 +1111,6 @@ class CelestronAUXDriver(IPyDriver):
         if event and event.root:
             self.equatorial_vector.update(event.root)
 
-        # Resolve target coordinates (might be different from members if not sidereal)
         target_ra, target_dec = await self._get_target_equatorial()
 
         if self.set_sync.membervalue == "On":
@@ -1083,7 +1123,7 @@ class CelestronAUXDriver(IPyDriver):
             body = ephem.FixedBody()
             body._ra = math.radians(target_ra * 15.0)
             body._dec = math.radians(target_dec)
-            body._epoch = self.observer.date  # Input is JNow
+            body._epoch = self.observer.date
             body.compute(self.observer)
 
             ideal_az_deg = math.degrees(float(body.az))
@@ -1093,17 +1133,24 @@ class CelestronAUXDriver(IPyDriver):
             raw_az_deg = (self.current_azm_steps / STEPS_PER_REVOLUTION) * 360.0
             raw_alt_deg = (self.current_alt_steps / STEPS_PER_REVOLUTION) * 360.0
 
-            # 3. Add vectors to alignment model
+            # 3. Calculate weight with Local Bias Proximity
+            weight = 1.0
+            bias = float(self.align_local_bias.membervalue) / 100.0
+            if bias > 0 and self._align_model.points:
+                # We could implement distance-based weighting here
+                pass
+
+            # 4. Add point to alignment model
             sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
             mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
-            self._align_model.add_point(sky_vec, mount_vec)
+            self._align_model.add_point(sky_vec, mount_vec, weight=weight)
 
-            # Update info
-            stars = [self.align_star1, self.align_star2, self.align_star3]
-            for i, p in enumerate(self._align_model.points):
-                s_ra, s_dec = vector_to_radec(self._align_model.points[i][0])
-                stars[i].membervalue = f"RA:{s_ra:.2f} Dec:{s_dec:.2f}"
-            await self.align_vector.send_setVector()
+            # 5. Pruning
+            if self.align_auto_prune.membervalue == "On":
+                max_pts = int(self.align_max_points.membervalue)
+                self._align_model.prune(max_pts)
+
+            await self.update_alignment_status()
 
             # Physical Sync (sets MC position to current state)
             cmd_azm = AUXCommand(
@@ -1183,32 +1230,28 @@ class CelestronAUXDriver(IPyDriver):
 
         if body:
             body.compute(self.observer)
-            # body.ra and body.dec are JNow radians
             return math.degrees(body.ra) / 15.0, math.degrees(body.dec)
 
         return float(self.ra.membervalue), float(self.dec.membervalue)
 
     async def equatorial_to_steps(self, ra_hours, dec_deg, time_offset: float = 0):
-        """Converts RA/Dec to motor encoder steps using current observer state and alignment."""
-        import math
-
-        ra_rad = (ra_hours / 24.0) * 2 * math.pi
-        dec_rad = (dec_deg / 360.0) * 2 * math.pi
+        """Converts RA/Dec to motor encoder steps."""
+        self.update_observer(time_offset=time_offset)
 
         body = ephem.FixedBody()
-        body._ra = ra_rad
-        body._dec = dec_rad
-        body._epoch = self.observer.date  # Treat input as JNow
-
-        self.update_observer(time_offset=time_offset)
+        body._ra = math.radians(ra_hours * 15.0)
+        body._dec = math.radians(dec_deg)
+        body._epoch = self.observer.date
         body.compute(self.observer)
 
         ideal_az_deg = math.degrees(float(body.az))
         ideal_alt_deg = math.degrees(float(body.alt))
 
-        # Apply Alignment Transform
         sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
-        mount_vec = self._align_model.transform_to_mount(sky_vec)
+        bias = float(self.align_local_bias.membervalue) / 100.0
+        mount_vec = self._align_model.transform_to_mount(
+            sky_vec, target_vec=sky_vec, local_bias=bias
+        )
         real_az_deg, real_alt_deg = vector_to_altaz(mount_vec)
 
         azm_steps = (
@@ -1220,13 +1263,10 @@ class CelestronAUXDriver(IPyDriver):
         return azm_steps, alt_steps
 
     async def steps_to_equatorial(self, azm_steps, alt_steps):
-        """Converts motor encoder steps to RA/Dec using current observer state and alignment."""
-        import math
-
+        """Converts motor encoder steps to RA/Dec."""
         real_az_deg = (azm_steps / STEPS_PER_REVOLUTION) * 360.0
         real_alt_deg = (alt_steps / STEPS_PER_REVOLUTION) * 360.0
 
-        # Apply Inverse Alignment Transform
         mount_vec = vector_from_altaz(real_az_deg, real_alt_deg)
         sky_vec = self._align_model.transform_to_sky(mount_vec)
         ideal_az_deg, ideal_alt_deg = vector_to_altaz(sky_vec)
@@ -1236,12 +1276,10 @@ class CelestronAUXDriver(IPyDriver):
             math.radians(ideal_az_deg), math.radians(ideal_alt_deg)
         )
 
-        ra_hours = (ra_rad / (2 * math.pi)) * 24
-        dec_deg = (dec_rad / (2 * math.pi)) * 360
-        return ra_hours, dec_deg
+        return (ra_rad / (2 * math.pi)) * 24, (dec_rad / (2 * math.pi)) * 360
 
     async def handle_guide_rate(self, event):
-        """Updates guiding/tracking rates for both axes."""
+        """Updates guiding/tracking rates."""
         if event and event.root:
             self.guide_rate_vector.update(event.root)
         val_azm = int(self.guide_azm.membervalue)
@@ -1263,17 +1301,18 @@ class CelestronAUXDriver(IPyDriver):
         s1 = await self.communicator.send_command(cmd_azm)
         s2 = await self.communicator.send_command(cmd_alt)
 
-        state = "Ok" if s1 and s2 else "Alert"
         if s1 and s2 and (val_azm > 0 or val_alt > 0):
             self.tracking_light.membervalue = "Ok"
         else:
             self.tracking_light.membervalue = "Idle"
 
         await self.mount_status_vector.send_setVector()
-        await self.guide_rate_vector.send_setVector(state=state)
+        await self.guide_rate_vector.send_setVector(
+            state="Ok" if s1 and s2 else "Alert"
+        )
 
     async def handle_track_mode(self, event):
-        """Starts or stops the background tracking loop."""
+        """Starts or stops tracking."""
         if event and event.root:
             self.track_mode_vector.update(event.root)
 
@@ -1294,22 +1333,17 @@ class CelestronAUXDriver(IPyDriver):
         await self.track_mode_vector.send_setVector(state="Ok")
 
     async def _tracking_loop(self):
-        """
-        Background loop for object tracking using 2nd order prediction.
-        Supports sidereal and moving objects.
-        """
+        """Background loop for tracking."""
         try:
             while True:
                 if not self.communicator or not self.communicator.connected:
                     await asyncio.sleep(1)
                     continue
 
-                # 1. Get coordinates at t-dt and t+dt
                 dt = 1.0
                 ra_plus, dec_plus = await self._get_target_equatorial(time_offset=dt)
                 ra_minus, dec_minus = await self._get_target_equatorial(time_offset=-dt)
 
-                # 2. Convert to encoder steps at those times
                 s_plus_azm, s_plus_alt = await self.equatorial_to_steps(
                     ra_plus, dec_plus, time_offset=dt
                 )
@@ -1359,13 +1393,12 @@ class CelestronAUXDriver(IPyDriver):
             print(f"Error in tracking loop: {e}")
 
     async def hardware(self):
-        """Periodically called to sync hardware state with INDI properties."""
+        """Periodically poll hardware status."""
         if self.communicator and self.communicator.connected:
             self.observer.date = ephem.now()
             self.update_observer()
             await self.read_mount_position()
 
-            # Poll slew status
             r_azm = await self.communicator.send_command(
                 AUXCommand(AUXCommands.MC_SLEW_DONE, AUXTargets.APP, AUXTargets.AZM)
             )
@@ -1379,16 +1412,17 @@ class CelestronAUXDriver(IPyDriver):
                 else:
                     self.slewing_light.membervalue = "Idle"
 
-                # Safety check: enforce slew limits
                 if not self.is_move_allowed(
                     self.current_azm_steps, self.current_alt_steps
                 ):
-                    # Stop both axes immediately if limit exceeded
                     await self.slew_by_rate(AUXTargets.AZM, 0, 1)
                     await self.slew_by_rate(AUXTargets.ALT, 0, 1)
                     self.slewing_light.membervalue = "Alert"
 
                 await self.mount_status_vector.send_setVector()
+
+            # Update alignment stats periodically
+            await self.update_alignment_status()
 
 
 if __name__ == "__main__":

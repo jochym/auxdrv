@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 8 - Advanced Calibration & PEC
+- **Current Phase**: Phase 9 - Advanced Calibration & PEC
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -20,20 +20,17 @@
 - **Phase 5**: Advanced Predictive Tracking (2nd Order)
 - **Phase 5.5**: Modern TUI & Alignment System
 - **Phase 6**: Safety & Accessories
-  - Implemented Slew Limits (Altitude/Azimuth)
-  - Implemented Cord Wrap Prevention
-  - Added Focuser support
-  - Added GPS module support
-  - Fixed linear Altitude axis and signed display in simulator.
 - **Phase 7**: Moving Objects Support
-  - Implemented support for Sun, Moon, and Planets.
-  - Implemented Satellite tracking via TLE data.
-  - Integrated dynamic coordinate resolver into tracking loop.
+- **Phase 8**: Multi-Point SVD Alignment
+  - Implemented SVD-based rotation fitting for any number of points.
+  - Added RMS Error calculation and reporting.
+  - Implemented Proximity Weighting (Local Bias) for high-precision local tracking.
+  - Added Automatic Pruning (Circular Buffer) for long sessions.
+  - Created comprehensive English documentation for Driver, Alignment, and Simulator.
 - **I18n**: Project translated to English for public release.
-- **Documentation**: README and developer guides updated.
 
 ### In Progress 🔄
-- **Phase 8**: Advanced Calibration & PEC
+- **Phase 9**: Advanced Calibration & PEC
   - Planning Periodic Error Correction (PEC) and cone error compensation.
 
 ### Pending Tasks 📋

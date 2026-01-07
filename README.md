@@ -47,19 +47,18 @@ The simulator provides a server compatible with the Stellarium protocol on port 
     *   Host: **localhost**, Port: **10001**.
 4.  Connect to the telescope. You will see the telescope reticle on the sky map.
 
-## Alignment System
+## Documentation
 
-The driver supports 3-point star alignment. To perform calibration:
-1.  Set `Coord Set Mode` to **SYNC**.
-2.  Select a star in your planetarium and issue a **Sync** command.
-3.  Repeat for 2-3 stars in different parts of the sky. The driver will automatically calculate a transformation matrix to improve GoTo accuracy.
+- [User Manual](docs/USER_MANUAL.md) - Installation and basic operation.
+- [Alignment System](docs/ALIGNMENT_SYSTEM.md) - Technical guide to the multi-point SVD alignment.
+- [Simulator Guide](simulator/README.md) - How to use the built-in telescope simulator.
 
-## Moving Objects Support
-
-The driver supports tracking and GoTo for non-sidereal objects:
-- **Solar System**: Support for Sun, Moon, and all major planets.
-- **Satellites**: High-precision tracking using TLE (Two-Line Element) data.
-- **Predictive Tracking**: Uses 2nd order prediction to calculate instantaneous object velocity for smooth tracking.
+## Features
+- **Singular Value Decomposition (SVD) Alignment**: Robust multi-point calibration with RMS error reporting.
+- **Predictive Tracking**: 2nd-order prediction for smooth tracking of stars, planets, and satellites.
+- **Full AUX Support**: Native binary protocol for high performance and compatibility.
+- **Safety**: Built-in slew limits and cord-wrap prevention.
+- **Interactive Simulator**: Modern TUI for offline development and testing.
 
 ## Configuration
 

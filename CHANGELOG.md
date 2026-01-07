@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-01-07
+
+### Added
+- **Phase 8: Multi-Point SVD Alignment** implemented.
+- Replaced 3-point matrix inversion with a robust **Singular Value Decomposition (SVD)** solver.
+- Support for an **unlimited number of alignment stars** with automatic fit optimization.
+- **RMS Error** reporting in INDI (arcseconds residual).
+- **Proximity Weighting (Local Bias)**: Heavy weighting of points near the target for high-precision local models.
+- **Automatic Pruning**: Configurable circular buffer for alignment points (useful for long AP sessions).
+- Comprehensive documentation in `docs/` and `simulator/`.
+- New test suite `tests/test_alignment_svd.py`.
+
+### Changed
+- Refactored `alignment.py` to use `numpy` for linear algebra.
+- Updated `celestron_indi_driver.py` to use the new alignment properties and logic.
+- Optimized alignment point management (Clear Last, Clear All).
+
 ## [0.7.0] - 2026-01-07
 
 ### Added

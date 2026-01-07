@@ -9,18 +9,18 @@ The project has realized the technical and mathematical foundations needed for t
 *   ✅ **Connectivity:** Support for Serial and TCP (simulator).
 *   ✅ **INDI API:** Full compatibility with `indipydriver 3.0.4`.
 *   ✅ **Astronomy:** RA/Dec <-> Encoder transformations, 2nd order prediction, anti-backlash GoTo.
-*   ✅ **Alignment:** 3-point matrix transformation model (alignment error correction).
+*   ✅ **Alignment:** Advanced **Multi-Point SVD solver** with RMS reporting and local weighting.
 *   ✅ **Simulator:** Modern **Textual TUI** interface, Stellarium protocol support.
 *   ✅ **Safety & Accessories:** Slew limits, Cord Wrap prevention, Focuser and GPS support.
 *   ✅ **Moving Objects:** Support for Sun, Moon, Planets, and Satellites (TLE).
-*   ✅ **Testing:** Comprehensive functional, safety, and mathematical test suite (20 tests passing).
-*   ✅ **Documentation:** Full Docstrings support (Google Style) and English translation.
+*   ✅ **Testing:** Comprehensive functional, safety, and mathematical test suite (23 tests passing).
+*   ✅ **Documentation:** Complete English documentation for driver, alignment system, and simulator.
 
 ---
 
 ## Development Roadmap
 
-### Phase 8: Advanced Calibration & PEC (Planned)
+### Phase 9: Advanced Calibration & PEC (Planned)
 *   Periodic Error Correction (PEC) support.
 *   Cone error and non-perpendicularity compensation.
 

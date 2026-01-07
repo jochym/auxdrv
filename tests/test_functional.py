@@ -297,7 +297,8 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         self.driver.track_none.membervalue = "On"
         self.driver.track_sidereal.membervalue = "Off"
         await self.driver.handle_track_mode(None)
-        await self.driver.handle_clear_alignment(None)
+        self.driver.align_clear_all.membervalue = "On"
+        await self.driver.handle_alignment_config(None)
 
         fixed_date = ephem.Date("2026/1/6 12:00:00")
         self.driver.observer.date = fixed_date
