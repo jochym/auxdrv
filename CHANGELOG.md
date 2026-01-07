@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-01-07
+
+### Added
+- **Phase 7: Moving Objects Support** implemented.
+- Support for tracking **Sun, Moon, and Planets** using `ephem` library.
+- Support for **Satellite tracking** using **TLE** data (`TLE_DATA` property).
+- New INDI properties: `TARGET_TYPE`, `PLANET_SELECT`, `TLE_DATA`.
+- Implemented `_get_target_equatorial` for dynamic coordinate resolution.
+- New test suite `tests/test_moving_objects.py` verifying non-sidereal tracking.
+
+### Changed
+- **Simulator Calibration**: Adjusted slew speeds to match **Celestron Evolution** ($4^\circ/s$ Fast, $1^\circ/s$ Slow).
+- **Test Optimization**: Updated functional tests to use realistic speeds and longer timeouts.
+
 ## [0.6.1] - 2026-01-06
 
 ### Fixed

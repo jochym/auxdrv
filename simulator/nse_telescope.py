@@ -72,15 +72,15 @@ ACK_CMDS = [0x02, 0x04, 0x06, 0x24]
 # Slew rates mapping (index 0-9 to deg/sec)
 RATES = {
     0: 0.0,
-    1: 1 / (360 * 60),
-    2: 2 / (360 * 60),
-    3: 5 / (360 * 60),
-    4: 15 / (360 * 60),
-    5: 30 / (360 * 60),
-    6: 1 / 360,
-    7: 2 / 360,
-    8: 5 / 360,
-    9: 10 / 360,
+    1: 0.008 / 360,  # ~2x sidereal
+    2: 0.017 / 360,  # ~4x sidereal
+    3: 0.033 / 360,  # ~8x sidereal
+    4: 0.067 / 360,  # ~16x sidereal
+    5: 0.133 / 360,  # ~32x sidereal
+    6: 0.5 / 360,  # 0.5 deg/s
+    7: 1.0 / 360,  # 1.0 deg/s
+    8: 2.0 / 360,  # 2.0 deg/s
+    9: 4.0 / 360,  # 4.0 deg/s (Max for Evolution)
 }
 
 
@@ -179,9 +179,10 @@ class NexStarScope:
         self.goto = False
         self.alt_guiderate = 0.0
         self.azm_guiderate = 0.0
-        self.alt_maxrate = 15000  # 15 deg/s
-        self.azm_maxrate = 15000
+        self.alt_maxrate = 4000  # 4.0 deg/s (Evolution)
+        self.azm_maxrate = 4000
         self.use_maxrate = False
+
         self.cmd_log = deque(maxlen=30)
         self.msg_log = deque(maxlen=10)
         self.bat_current = 2468
@@ -368,8 +369,9 @@ class NexStarScope:
         self.last_cmd = "GOTO_SLOW"
         self.slewing = self.goto = True
         self.guiding = False
-        r = 5.0 / 360  # 5 deg/s
+        r = 1.0 / 360  # 1.0 deg/s (Rate 7)
         a = unpack_int3(data)
+
         if rcv == 0x11:
             if a > 0.5:
                 a -= 1.0
@@ -542,7 +544,7 @@ class NexStarScope:
     def tick(self, interval):
         """Physical model update called on every timer tick."""
         eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
-        maxrate = 20 / 360  # Increased maxrate for faster testing
+        maxrate = 4.5 / 360  # Max rate slightly above max GoTo rate
 
         # Update Altitude with limit enforcement
         self.alt += (self.alt_rate + self.alt_guiderate) * interval

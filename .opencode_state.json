@@ -2,8 +2,8 @@
 
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
-- **Last Updated**: 2026-01-06
-- **Current Phase**: Phase 7 - Moving Objects Support
+- **Last Updated**: 2026-01-07
+- **Current Phase**: Phase 8 - Advanced Calibration & PEC
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -25,13 +25,17 @@
   - Added Focuser support
   - Added GPS module support
   - Fixed linear Altitude axis and signed display in simulator.
+- **Phase 7**: Moving Objects Support
+  - Implemented support for Sun, Moon, and Planets.
+  - Implemented Satellite tracking via TLE data.
+  - Integrated dynamic coordinate resolver into tracking loop.
 - **I18n**: Project translated to English for public release.
 - **Documentation**: README and developer guides updated.
 
 ### In Progress 🔄
-- **Phase 7**: Moving Objects Support
-  - Researching TLE integration and non-sidereal tracking algorithms.
+- **Phase 8**: Advanced Calibration & PEC
+  - Planning Periodic Error Correction (PEC) and cone error compensation.
 
 ### Pending Tasks 📋
-1. Implement non-sidereal tracking (Satellites/Comets)
-2. Add support for TLE data integration
+1. Implement Periodic Error Correction (PEC)
+2. Add support for cone error and non-perpendicularity compensation

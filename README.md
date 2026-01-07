@@ -54,6 +54,13 @@ The driver supports 3-point star alignment. To perform calibration:
 2.  Select a star in your planetarium and issue a **Sync** command.
 3.  Repeat for 2-3 stars in different parts of the sky. The driver will automatically calculate a transformation matrix to improve GoTo accuracy.
 
+## Moving Objects Support
+
+The driver supports tracking and GoTo for non-sidereal objects:
+- **Solar System**: Support for Sun, Moon, and all major planets.
+- **Satellites**: High-precision tracking using TLE (Two-Line Element) data.
+- **Predictive Tracking**: Uses 2nd order prediction to calculate instantaneous object velocity for smooth tracking.
+
 ## Configuration
 
 Observer location and ports are defined in the `config.yaml` file. Default coordinates are set for **Beblo, Poland**.

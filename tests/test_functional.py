@@ -328,9 +328,9 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
                 int((math.degrees(float(body.alt)) / 360.0) * 16777216) % 16777216
             )
 
-            await self.driver._do_slew(AUXTargets.AZM, az_steps, fast=False)
-            await self.driver._do_slew(AUXTargets.ALT, alt_steps, fast=False)
-            await self.wait_for_idle(30)
+            await self.driver._do_slew(AUXTargets.AZM, az_steps, fast=True)
+            await self.driver._do_slew(AUXTargets.ALT, alt_steps, fast=True)
+            await self.wait_for_idle(60)
             await self.driver.handle_equatorial_goto(None)
 
         self.assertEqual(len(self.driver._align_model.points), 3)
@@ -341,7 +341,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         self.driver.ra.membervalue = target_ra
         self.driver.dec.membervalue = target_dec
         await self.driver.handle_equatorial_goto(None)
-        await self.wait_for_idle(30)
+        await self.wait_for_idle(60)
 
         await self.driver.read_mount_position()
         self.assertAlmostEqual(float(self.driver.ra.membervalue), target_ra, delta=0.1)

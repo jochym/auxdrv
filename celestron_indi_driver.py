@@ -112,6 +112,9 @@ class CelestronAUXDriver(IPyDriver):
                 self.focuser_vector,
                 self.gps_status_vector,
                 self.gps_refresh_vector,
+                self.target_type_vector,
+                self.planet_select_vector,
+                self.tle_data_vector,
             ],
         )
 
@@ -505,6 +508,75 @@ class CelestronAUXDriver(IPyDriver):
             [self.gps_refresh],
         )
 
+        # Moving Objects Support
+        self.target_sidereal = SwitchMember("SIDEREAL", "Sidereal", "On")
+        self.target_sun = SwitchMember("SUN", "Sun", "Off")
+        self.target_moon = SwitchMember("MOON", "Moon", "Off")
+        self.target_planet = SwitchMember("PLANET", "Planet", "Off")
+        self.target_satellite = SwitchMember("SATELLITE", "Satellite", "Off")
+        self.target_type_vector = SwitchVector(
+            "TARGET_TYPE",
+            "Target Type",
+            "Main",
+            "rw",
+            "OneOfMany",
+            "Idle",
+            [
+                self.target_sidereal,
+                self.target_sun,
+                self.target_moon,
+                self.target_planet,
+                self.target_satellite,
+            ],
+        )
+
+        self.planet_mercury = SwitchMember("MERCURY", "Mercury", "Off")
+        self.planet_venus = SwitchMember("VENUS", "Venus", "Off")
+        self.planet_mars = SwitchMember("MARS", "Mars", "On")
+        self.planet_jupiter = SwitchMember("JUPITER", "Jupiter", "Off")
+        self.planet_saturn = SwitchMember("SATURN", "Saturn", "Off")
+        self.planet_uranus = SwitchMember("URANUS", "Uranus", "Off")
+        self.planet_neptune = SwitchMember("NEPTUNE", "Neptune", "Off")
+        self.planet_pluto = SwitchMember("PLUTO", "Pluto", "Off")
+        self.planet_select_vector = SwitchVector(
+            "PLANET_SELECT",
+            "Select Planet",
+            "Main",
+            "rw",
+            "OneOfMany",
+            "Idle",
+            [
+                self.planet_mercury,
+                self.planet_venus,
+                self.planet_mars,
+                self.planet_jupiter,
+                self.planet_saturn,
+                self.planet_uranus,
+                self.planet_neptune,
+                self.planet_pluto,
+            ],
+        )
+
+        self.tle_name = TextMember("NAME", "Name", "ISS")
+        self.tle_line1 = TextMember(
+            "LINE1",
+            "Line 1",
+            "1 25544U 98067A   26006.88541667  .00000000  00000-0  00000-0 0    01",
+        )
+        self.tle_line2 = TextMember(
+            "LINE2",
+            "Line 2",
+            "2 25544  51.6400  10.0000 0001000   0.0000   0.0000 15.50000000000001",
+        )
+        self.tle_data_vector = TextVector(
+            "TLE_DATA",
+            "TLE Data",
+            "Main",
+            "rw",
+            "Idle",
+            [self.tle_name, self.tle_line1, self.tle_line2],
+        )
+
     def update_observer(self, time_offset: float = 0):
         """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
@@ -571,6 +643,15 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_focuser(event)
         elif event.vectorname == "GPS_REFRESH":
             await self.handle_gps_refresh(event)
+        elif event.vectorname == "TARGET_TYPE":
+            self.target_type_vector.update(event.root)
+            await self.target_type_vector.send_setVector(state="Ok")
+        elif event.vectorname == "PLANET_SELECT":
+            self.planet_select_vector.update(event.root)
+            await self.planet_select_vector.send_setVector(state="Ok")
+        elif event.vectorname == "TLE_DATA":
+            self.tle_data_vector.update(event.root)
+            await self.tle_data_vector.send_setVector(state="Ok")
 
     async def handle_limits(self, event):
         """Updates internal slew limits."""
@@ -989,8 +1070,8 @@ class CelestronAUXDriver(IPyDriver):
         if event and event.root:
             self.equatorial_vector.update(event.root)
 
-        target_ra = float(self.ra.membervalue)
-        target_dec = float(self.dec.membervalue)
+        # Resolve target coordinates (might be different from members if not sidereal)
+        target_ra, target_dec = await self._get_target_equatorial()
 
         if self.set_sync.membervalue == "On":
             # Perform SYNC
@@ -1059,6 +1140,53 @@ class CelestronAUXDriver(IPyDriver):
                 await self.equatorial_vector.send_setVector(state="Ok")
             else:
                 await self.equatorial_vector.send_setVector(state="Alert")
+
+    async def _get_target_equatorial(self, time_offset: float = 0):
+        """Returns JNow RA/Dec for the currently selected target type."""
+        self.update_observer(time_offset)
+
+        if self.target_sidereal.membervalue == "On":
+            return float(self.ra.membervalue), float(self.dec.membervalue)
+
+        body = None
+        if self.target_sun.membervalue == "On":
+            body = ephem.Sun()
+        elif self.target_moon.membervalue == "On":
+            body = ephem.Moon()
+        elif self.target_planet.membervalue == "On":
+            if self.planet_mercury.membervalue == "On":
+                body = ephem.Mercury()
+            elif self.planet_venus.membervalue == "On":
+                body = ephem.Venus()
+            elif self.planet_mars.membervalue == "On":
+                body = ephem.Mars()
+            elif self.planet_jupiter.membervalue == "On":
+                body = ephem.Jupiter()
+            elif self.planet_saturn.membervalue == "On":
+                body = ephem.Saturn()
+            elif self.planet_uranus.membervalue == "On":
+                body = ephem.Uranus()
+            elif self.planet_neptune.membervalue == "On":
+                body = ephem.Neptune()
+            elif self.planet_pluto.membervalue == "On":
+                body = ephem.Pluto()
+        elif self.target_satellite.membervalue == "On":
+            try:
+                body = ephem.readtle(
+                    self.tle_name.membervalue,
+                    self.tle_line1.membervalue,
+                    self.tle_line2.membervalue,
+                )
+            except Exception as e:
+                print(f"Error reading TLE: {e}")
+                return float(self.ra.membervalue), float(self.dec.membervalue)
+
+        if body:
+            body.compute(self.observer)
+            # body.ra and body.dec are JNow radians
+            return math.degrees(body.ra) / 15.0, math.degrees(body.dec)
+
+        return float(self.ra.membervalue), float(self.dec.membervalue)
 
     async def equatorial_to_steps(self, ra_hours, dec_deg, time_offset: float = 0):
         """Converts RA/Dec to motor encoder steps using current observer state and alignment."""
@@ -1168,6 +1296,7 @@ class CelestronAUXDriver(IPyDriver):
     async def _tracking_loop(self):
         """
         Background loop for object tracking using 2nd order prediction.
+        Supports sidereal and moving objects.
         """
         try:
             while True:
@@ -1175,15 +1304,17 @@ class CelestronAUXDriver(IPyDriver):
                     await asyncio.sleep(1)
                     continue
 
-                ra = float(self.ra.membervalue)
-                dec = float(self.dec.membervalue)
-
+                # 1. Get coordinates at t-dt and t+dt
                 dt = 1.0
+                ra_plus, dec_plus = await self._get_target_equatorial(time_offset=dt)
+                ra_minus, dec_minus = await self._get_target_equatorial(time_offset=-dt)
+
+                # 2. Convert to encoder steps at those times
                 s_plus_azm, s_plus_alt = await self.equatorial_to_steps(
-                    ra, dec, time_offset=dt
+                    ra_plus, dec_plus, time_offset=dt
                 )
                 s_minus_azm, s_minus_alt = await self.equatorial_to_steps(
-                    ra, dec, time_offset=-dt
+                    ra_minus, dec_minus, time_offset=-dt
                 )
 
                 def diff_steps(s2, s1):
