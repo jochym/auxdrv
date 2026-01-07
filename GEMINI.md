@@ -1,8 +1,8 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v0.7.0)
+## Current Project Status (v0.9.0)
 
-The project has realized the technical and mathematical foundations needed for telescope control, including an alignment system, safety features, accessory support, and non-sidereal tracking.
+The project has realized the technical and mathematical foundations needed for telescope control, including an alignment system, safety features, accessory support, non-sidereal tracking, and a high-fidelity simulator.
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
