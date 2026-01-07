@@ -176,7 +176,10 @@ class NexStarScope:
         self.pe_amplitude = imp.get("periodic_error_arcsec", 0.0) / (360.0 * 3600.0)
         self.pe_period = imp.get("periodic_error_period_sec", 480.0)
         self.cone_error = imp.get("cone_error_arcmin", 0.0) / (360.0 * 60.0)
+        self.non_perp = imp.get("non_perpendicularity_arcmin", 0.0) / (360.0 * 60.0)
+        self.refraction_enabled = imp.get("refraction_enabled", False)
         self.jitter_sigma = imp.get("encoder_jitter_steps", 0) / 16777216.0
+        self.clock_drift = imp.get("clock_drift", 0.0)  # e.g. 0.001 for 0.1% drift
         self.sim_time = 0.0
 
         # Backlash management
@@ -321,21 +324,48 @@ class NexStarScope:
         return b""
 
     def get_position(self, data, snd, rcv):
-        """Returns current MC position as 3-byte fraction with jitter and cone error."""
+        """Returns current MC position as 3-byte fraction with optional jitter."""
         pos = self.alt if rcv == 0x11 else self.azm
-
-        # Apply imperfections to reported position
-        if rcv == 0x11:  # ALT
-            pos += self.cone_error
-        else:  # AZM
-            # Add periodic error to Azm tracking
-            pos += self.pe_amplitude * sin(2 * pi * self.sim_time / self.pe_period)
 
         # Add encoder jitter
         if self.jitter_sigma > 0:
             pos += random.gauss(0, self.jitter_sigma)
 
         return pack_int3(pos)
+
+    def get_sky_altaz(self):
+        """
+        Returns the actual pointing position in the sky (fraction of 360)
+        considering mechanical and optical imperfections.
+        """
+        sky_alt = self.alt
+        sky_azm = self.azm
+
+        # 1. Cone error (Alt offset)
+        sky_alt += self.cone_error
+
+        # 2. Non-perpendicularity
+        # Affects Azm depending on Alt
+        import math
+
+        sky_azm += (
+            self.non_perp
+            * math.tan(math.radians(max(-80, min(80, self.alt * 360.0))))
+            / 360.0
+        )
+
+        # 3. Periodic Error (RA/Azm only)
+        sky_azm += self.pe_amplitude * sin(2 * pi * self.sim_time / self.pe_period)
+
+        # 4. Atmospheric Refraction (Approximate formula)
+        if self.refraction_enabled:
+            # Simple Bennett's formula for refraction in arcmin:
+            # R = 1 / tan(h + 7.31/(h + 4.4))
+            h = max(0.1, sky_alt * 360.0)  # degrees
+            ref_arcmin = 1.0 / math.tan(math.radians(h + 7.31 / (h + 4.4)))
+            sky_alt += ref_arcmin / (60.0 * 360.0)
+
+        return sky_azm % 1.0, sky_alt
 
     def goto_fast(self, data, snd, rcv):
         """Starts a high-speed GOTO movement."""
@@ -574,6 +604,7 @@ class NexStarScope:
 
     def tick(self, interval):
         """Physical model update called on every timer tick."""
+        interval *= 1.0 + self.clock_drift
         self.sim_time += interval
         eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
         maxrate = 4.5 / 360  # Max rate slightly above max GoTo rate

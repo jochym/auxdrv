@@ -72,18 +72,18 @@ class TestSimulatorCore(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(pos1, pos2, delta=1e-7)
 
     def test_periodic_error(self):
-        """Verify Periodic Error (PE) injection in reported position."""
+        """Verify Periodic Error (PE) injection in reported sky position."""
         self.scope.pe_amplitude = 100.0 / (360 * 3600)  # 100 arcsec
         self.scope.pe_period = 100.0  # 100 seconds
 
         # At t=0, sin(0)=0
         self.scope.sim_time = 0
-        p0 = unpack_int3(self.scope.get_position(b"", 0x20, 0x10))
+        p0, _ = self.scope.get_sky_altaz()
         self.assertAlmostEqual(p0, self.scope.azm, delta=1e-7)
 
         # At t=25 (1/4 period), sin(pi/2)=1
         self.scope.sim_time = 25.0
-        p1 = unpack_int3(self.scope.get_position(b"", 0x20, 0x10))
+        p1, _ = self.scope.get_sky_altaz()
         self.assertAlmostEqual(p1, self.scope.azm + self.scope.pe_amplitude, delta=1e-7)
 
 

@@ -156,7 +156,8 @@ def make_stellarium_status(tel, obs):
     """Generates Stellarium status packet (Position report)."""
     obs.date = ephem.now()
     obs.epoch = obs.date  # Use JNow
-    rajnow, decjnow = obs.radec_of(tel.azm * 2 * pi, tel.alt * 2 * pi)
+    sky_azm, sky_alt = tel.get_sky_altaz()
+    rajnow, decjnow = obs.radec_of(sky_azm * 2 * pi, sky_alt * 2 * pi)
 
     msg = bytearray(24)
     msg[0:2] = to_le(24, 2)
@@ -283,6 +284,8 @@ class SimulatorApp(App):
                 yield Static(id="imp-pe")
                 yield Static(id="imp-cone")
                 yield Static(id="imp-jitter")
+                yield Static(id="imp-nonperp")
+                yield Static(id="imp-drift")
 
             with Vertical(id="right-panel"):
                 yield Static("AUX BUS LOG", classes="panel-title")
@@ -296,7 +299,7 @@ class SimulatorApp(App):
         self.set_interval(0.1, self.update_stats)
         self.log_sys(f"Simulator started on port {self.args.port}")
         self.log_sys(f"Stellarium server on port {self.args.stellarium}")
-        self.log_sys(f"Location: {obs_cfg.get('name', 'Beblo')}")
+        self.log_sys(f"Location: {obs_cfg.get('name', 'Default')}")
 
     def update_stats(self) -> None:
         alt_str = repr_angle(self.telescope.alt, signed=True)
@@ -309,9 +312,8 @@ class SimulatorApp(App):
         now = datetime.now(timezone.utc)
         self.obs.date = ephem.Date(now)
         self.obs.epoch = self.obs.date  # Use JNow
-        rajnow, decjnow = self.obs.radec_of(
-            self.telescope.azm * 2 * pi, self.telescope.alt * 2 * pi
-        )
+        sky_azm, sky_alt = self.telescope.get_sky_altaz()
+        rajnow, decjnow = self.obs.radec_of(sky_azm * 2 * pi, sky_alt * 2 * pi)
 
         self.ra_samples.append(float(rajnow))
         self.dec_samples.append(float(decjnow))
@@ -332,12 +334,6 @@ class SimulatorApp(App):
                 v_ra = (d_ra * (180.0 / pi)) / dt  # deg/s
                 v_dec = (d_dec * (180.0 / pi)) / dt  # deg/s
 
-                if self.args.debug:
-                    print(
-                        f'DEBUG: dt={dt:.4f} RA={rajnow} Dec={decjnow} vRA={v_ra * 3600:+.2f}"/s vDec={v_dec * 3600:+.2f}"/s',
-                        file=sys.stderr,
-                    )
-
         mode = (
             "SLEWING"
             if self.telescope.slewing
@@ -346,42 +342,55 @@ class SimulatorApp(App):
         tracking = "ON" if self.telescope.guiding else "OFF"
         battery = f"{self.telescope.bat_voltage / 1e6:.2f}V"
 
-        self.query_one("#pos-alt").update(f"Alt: [cyan]{alt_str}[/cyan]")
-        self.query_one("#pos-azm").update(f"Azm: [cyan]{azm_str}[/cyan]")
-        self.query_one("#vel-alt").update(f"vAlt: [blue]{v_alt:+.4f}°/s[/blue]")
-        self.query_one("#vel-azm").update(f"vAzm: [blue]{v_azm:+.4f}°/s[/blue]")
+        self.query_one("#pos-alt", Static).update(f"Alt: [cyan]{alt_str}[/cyan]")
+        self.query_one("#pos-azm", Static).update(f"Azm: [cyan]{azm_str}[/cyan]")
+        self.query_one("#vel-alt", Static).update(f"vAlt: [blue]{v_alt:+.4f}°/s[/blue]")
+        self.query_one("#vel-azm", Static).update(f"vAzm: [blue]{v_azm:+.4f}°/s[/blue]")
 
-        self.query_one("#pos-ra").update(f"RA:  [yellow]{rajnow}[/yellow]")
-        self.query_one("#pos-dec").update(f"Dec: [yellow]{decjnow}[/yellow]")
-        self.query_one("#vel-ra").update(f'vRA:  [blue]{v_ra * 3600:+.2f}"/s[/blue]')
-        self.query_one("#vel-dec").update(f'vDec: [blue]{v_dec * 3600:+.2f}"/s[/blue]')
+        self.query_one("#pos-ra", Static).update(f"RA:  [yellow]{rajnow}[/yellow]")
+        self.query_one("#pos-dec", Static).update(f"Dec: [yellow]{decjnow}[/yellow]")
+        self.query_one("#vel-ra", Static).update(
+            f'vRA:  [blue]{v_ra * 3600:+.2f}"/s[/blue]'
+        )
+        self.query_one("#vel-dec", Static).update(
+            f'vDec: [blue]{v_dec * 3600:+.2f}"/s[/blue]'
+        )
 
-        self.query_one("#status-mode").update(f"Mode: [green]{mode}[/green]")
-        self.query_one("#status-tracking").update(
+        self.query_one("#status-mode", Static).update(f"Mode: [green]{mode}[/green]")
+        self.query_one("#status-tracking", Static).update(
             f"Tracking: [magenta]{tracking}[/magenta]"
         )
-        self.query_one("#status-battery").update(f"Battery: [red]{battery}[/red]")
+        self.query_one("#status-battery", Static).update(
+            f"Battery: [red]{battery}[/red]"
+        )
 
         # Update Imperfections
-        self.query_one("#imp-backlash").update(
+        self.query_one("#imp-backlash", Static).update(
             f"Backlash: [cyan]{self.telescope.backlash_steps}[/cyan] steps"
         )
         pe_arcsec = self.telescope.pe_amplitude * 360 * 3600
-        self.query_one("#imp-pe").update(
+        self.query_one("#imp-pe", Static).update(
             f'Periodic Error: [cyan]{pe_arcsec:.1f}[/cyan]"'
         )
         cone_arcmin = self.telescope.cone_error * 360 * 60
-        self.query_one("#imp-cone").update(
+        self.query_one("#imp-cone", Static).update(
             f"Cone Error: [cyan]{cone_arcmin:.1f}[/cyan]'"
         )
         jitter_steps = self.telescope.jitter_sigma * 16777216
-        self.query_one("#imp-jitter").update(
+        self.query_one("#imp-jitter", Static).update(
             f"Jitter: [cyan]{jitter_steps:.1f}[/cyan] steps"
+        )
+        nonperp_arcmin = self.telescope.non_perp * 360 * 60
+        self.query_one("#imp-nonperp", Static).update(
+            f"Non-perp: [cyan]{nonperp_arcmin:.1f}[/cyan]'"
+        )
+        self.query_one("#imp-drift", Static).update(
+            f"Clock Drift: [cyan]{self.telescope.clock_drift * 100:.3f}%[/cyan]"
         )
 
         while self.telescope.cmd_log:
             entry = self.telescope.cmd_log.popleft()
-            self.query_one("#aux-log").write_line(
+            self.query_one("#aux-log", Log).write_line(
                 f"[blue]{datetime.now().strftime('%H:%M:%S')}[/blue] {entry}"
             )
 
@@ -390,7 +399,7 @@ class SimulatorApp(App):
             self.log_sys(msg)
 
     def log_sys(self, message: str) -> None:
-        self.query_one("#sys-messages").write_line(
+        self.query_one("#sys-messages", Log).write_line(
             f"[blue]{datetime.now().strftime('%H:%M:%S')}[/blue] {message}"
         )
 
@@ -448,37 +457,9 @@ async def main_async():
 
     if args.text:
         print(f"Simulator running in headless mode on port {args.port}")
-        ra_samples = deque(maxlen=10)
-        dec_samples = deque(maxlen=10)
-        time_samples = deque(maxlen=10)
         try:
             while True:
-                if args.debug:
-                    now = datetime.now(timezone.utc)
-                    obs.date = ephem.Date(now)
-                    obs.epoch = obs.date  # Use JNow
-                    rajnow, decjnow = obs.radec_of(
-                        telescope.azm * 2 * pi, telescope.alt * 2 * pi
-                    )
-                    ra_samples.append(float(rajnow))
-                    dec_samples.append(float(decjnow))
-                    time_samples.append(now)
-                    if len(time_samples) > 1:
-                        dt = (time_samples[-1] - time_samples[0]).total_seconds()
-                        if dt > 0:
-                            d_ra = ra_samples[-1] - ra_samples[0]
-                            if d_ra > pi:
-                                d_ra -= 2 * pi
-                            if d_ra < -pi:
-                                d_ra += 2 * pi
-                            d_dec = dec_samples[-1] - dec_samples[0]
-                            v_ra = (d_ra * (180.0 / pi)) / dt
-                            v_dec = (d_dec * (180.0 / pi)) / dt
-                            print(
-                                f'DEBUG: dt={dt:.4f} RA={rajnow} Dec={decjnow} vRA={v_ra * 3600:+.2f}"/s vDec={v_dec * 3600:+.2f}"/s',
-                                file=sys.stderr,
-                            )
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             pass
     else:

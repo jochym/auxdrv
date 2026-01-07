@@ -75,6 +75,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """
         Initializes the driver and connects to the simulator.
+        Resets mount position to (0,0) for each test.
         """
         self.driver = CelestronAUXDriver()
         self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
@@ -88,6 +89,27 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         self.driver.conn_connect.membervalue = "On"
         await self.driver.handle_connection(None)
         self.assertTrue(self.driver.communicator and self.driver.communicator.connected)
+
+        # Reset position to 0,0
+        if self.driver.communicator:
+            from celestron_aux_driver import pack_int3_steps
+
+            cmd_azm = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.AZM,
+                pack_int3_steps(0),
+            )
+            cmd_alt = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.ALT,
+                pack_int3_steps(0),
+            )
+            await self.driver.communicator.send_command(cmd_azm)
+            await self.driver.communicator.send_command(cmd_alt)
+            await self.driver.slew_by_rate(AUXTargets.AZM, 0, 1)
+            await self.driver.slew_by_rate(AUXTargets.ALT, 0, 1)
 
     async def asyncTearDown(self):
         """
@@ -178,7 +200,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             1. Sets initial rates to 0 and records position.
             2. Sets Azm guide rate to 1000 steps/sec.
             3. Waits for 3 seconds.
-            4. Verifies that the encoder position has increased.
+            4. Verifies that the encoder position has increased using wrap-around aware diff.
 
         Expected Results:
             - Mount position must increase significantly.
@@ -192,7 +214,9 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         p1_azm = int(self.driver.azm_steps.membervalue)
 
         # Use a larger guide rate to be sure we see movement
-        self.driver.guide_azm.membervalue = 1000
+        # The units are roughly 1/79 of a step/sec.
+        # To get 1000 steps/sec we need ~80000 units.
+        self.driver.guide_azm.membervalue = 100000
         await self.driver.handle_guide_rate(None)
         self.assertEqual(self.driver.tracking_light.membervalue, "Ok")
 
@@ -200,7 +224,15 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         await self.driver.read_mount_position()
         p2_azm = int(self.driver.azm_steps.membervalue)
 
-        self.assertGreater(p2_azm, p1_azm)
+        def diff_steps(s2, s1):
+            d = s2 - s1
+            if d > 16777216 / 2:
+                d -= 16777216
+            if d < -16777216 / 2:
+                d += 16777216
+            return d
+
+        self.assertGreater(diff_steps(p2_azm, p1_azm), 1000)
 
         self.driver.guide_azm.membervalue = 0
         await self.driver.handle_guide_rate(None)
@@ -233,10 +265,16 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         azm = int(self.driver.azm_steps.membervalue)
         alt = int(self.driver.alt_steps.membervalue)
 
-        dist_azm = min(azm, 16777216 - azm)
-        dist_alt = min(alt, 16777216 - alt)
+        def diff_steps(s2, s1):
+            d = s2 - s1
+            if d > 16777216 / 2:
+                d -= 16777216
+            if d < -16777216 / 2:
+                d += 16777216
+            return d
 
-        self.assertLess(dist_azm, 500)
+        self.assertLess(abs(diff_steps(azm, 0)), 500)
+        self.assertLess(abs(diff_steps(alt, 0)), 500)
         self.assertEqual(self.driver.parked_light.membervalue, "Ok")
 
         self.driver.unpark_switch.membervalue = "On"
