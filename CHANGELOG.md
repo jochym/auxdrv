@@ -2,12 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-01-08
+
+### Fixed
+- **Simulator Rate Bug**: Fixed an issue where the simulator continued reporting non-zero velocities after hitting a physical altitude limit.
+- **GoTo Termination**: Improved GoTo logic to correctly terminate when reaching a mechanical limit, even if the target is beyond it.
+- **3D Geometry**: Fixed OTA orientation in the web console; it is now correctly perpendicular to the altitude axis.
+
+## [1.5.0] - 2026-01-07
+
+### Added
+- **Web Console & Digital Twin**: Implemented an optional 3D visualization console using Three.js and FastAPI.
+- **Evolution 8" Model**: Added a faithful geometric model of the Evolution 8 mount for visual validation.
+- **Collision Visualization**: Real-time visual warnings in the web console if the camera clearance is insufficient.
+- **Optional Dependencies**: Support for `[simulator]` and `[web]` extras in the Python package.
+
 ## [1.4.0] - 2026-01-07
 
 ### Added
 - **PyPI Packaging**: Refactored project to modern `src` layout and added `pyproject.toml` for standard distribution.
 - **CLI Entry Points**: Added `indi-celestron-aux` and `celestron-aux-simulator` as standalone commands.
 - **Centralized Configuration**: All driver and validation settings are now managed via a single `config.yaml` with support for CLI and Environment overrides.
+- **Internal INDI Server**: Integrated `indipyserver` allowing the driver to run as a standalone network server.
 
 ## [1.3.0] - 2026-01-07
 

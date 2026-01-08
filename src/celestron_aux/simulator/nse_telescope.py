@@ -712,7 +712,15 @@ class NexStarScope:
 
         self.alt += alt_move
 
-        self.alt = max(self.alt_min, min(self.alt_max, self.alt))
+        # Enforce limits and zero rate if hitting them
+        if self.alt < self.alt_min:
+            self.alt = self.alt_min
+            if self.alt_rate < 0:
+                self.alt_rate = 0
+        elif self.alt > self.alt_max:
+            self.alt = self.alt_max
+            if self.alt_rate > 0:
+                self.alt_rate = 0
 
         if self.slewing and self.goto:
             for axis in ["azm", "alt"]:
@@ -726,7 +734,15 @@ class NexStarScope:
                     elif diff < -0.5:
                         diff += 1.0
 
-                if abs(diff) < eps:
+                # Special case: If we are at a limit and target is beyond it, we are done
+                at_limit = False
+                if axis == "alt":
+                    if (cur <= self.alt_min + 1e-9 and trg < self.alt_min) or (
+                        cur >= self.alt_max - 1e-9 and trg > self.alt_max
+                    ):
+                        at_limit = True
+
+                if abs(diff) < eps or at_limit:
                     setattr(self, rate_attr, 0)
                 else:
                     s = 1 if diff > 0 else -1
