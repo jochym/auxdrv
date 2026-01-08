@@ -4,6 +4,7 @@ Web-based 3D visualization console for the Celestron AUX Simulator.
 
 import asyncio
 import json
+import math
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 import uvicorn
@@ -42,7 +43,7 @@ class WebConsole:
 
     async def broadcast_state(self):
         """Broadcasts telescope state to all connected clients."""
-        from math import pi
+        from math import pi, degrees, cos, radians
         import ephem
 
         while True:
@@ -53,6 +54,40 @@ class WebConsole:
 
                 sky_azm, sky_alt = self.telescope.get_sky_altaz()
                 ra, dec = self.obs.radec_of(sky_azm * 2 * pi, sky_alt * 2 * pi)
+
+                # Get nearby stars for schematic sky view
+                stars = []
+                fov_deg = 10.0  # 10 degree field of view
+                for name, body in [
+                    ("Polaris", ephem.star("Polaris")),
+                    ("Sirius", ephem.star("Sirius")),
+                    ("Vega", ephem.star("Vega")),
+                    ("Arcturus", ephem.star("Arcturus")),
+                    ("Capella", ephem.star("Capella")),
+                    ("Rigel", ephem.star("Rigel")),
+                    ("Betelgeuse", ephem.star("Betelgeuse")),
+                    ("Procyon", ephem.star("Procyon")),
+                ]:
+                    try:
+                        body.compute(self.obs)
+                        # Check if within FOV
+                        dist = ephem.separation(
+                            (body.az, body.alt), (sky_azm * 2 * pi, sky_alt * 2 * pi)
+                        )
+                        if dist < radians(fov_deg):
+                            # Calculate relative X, Y in FOV [-1, 1]
+                            dx = (degrees(body.az) - sky_azm * 360.0) * cos(body.alt)
+                            dy = degrees(body.alt) - sky_alt * 360.0
+                            stars.append(
+                                {
+                                    "name": name,
+                                    "x": dx / (fov_deg / 2),
+                                    "y": dy / (fov_deg / 2),
+                                    "mag": body.mag,
+                                }
+                            )
+                    except:
+                        continue
 
                 state = {
                     "azm": sky_azm * 360.0,
@@ -66,6 +101,7 @@ class WebConsole:
                     "voltage": self.telescope.bat_voltage / 1e6,
                     "current": 0.2 + (1.0 if self.telescope.slewing else 0.0),
                     "timestamp": self.telescope.sim_time,
+                    "stars": stars,
                 }
                 message = json.dumps(state)
                 disconnected = set()
@@ -114,6 +150,7 @@ INDEX_HTML = """
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
         #info { position: absolute; top: 10px; left: 10px; background: rgba(26, 27, 38, 0.8); padding: 15px; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 250px; }
+        #sky-view { position: absolute; top: 10px; right: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 200px; height: 200px; border-radius: 50%; overflow: hidden; }
         #controls { position: absolute; bottom: 10px; left: 10px; color: #565f89; font-size: 12px; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
@@ -122,8 +159,8 @@ INDEX_HTML = """
         .blue { color: #7aa2f7; }
         .yellow { color: #e0af68; }
         .magenta { color: #bb9af7; }
-
         .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .sky-label { position: absolute; bottom: 5px; width: 100%; text-align: center; font-size: 10px; color: #565f89; pointer-events: none; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -142,6 +179,10 @@ INDEX_HTML = """
         <div id="collision" class="warning" style="display:none; margin-top:10px">
             ⚠️ POTENTIAL COLLISION DETECTED
         </div>
+    </div>
+    <div id="sky-view">
+        <canvas id="sky-canvas" width="200" height="200"></canvas>
+        <div class="sky-label">FOV 10°</div>
     </div>
     <div id="controls">Mouse: Rotate | Scroll: Zoom | Right Click: Pan</div>
     <script>
@@ -179,6 +220,22 @@ INDEX_HTML = """
         azmGroup.position.y = geo.base_height;
         scene.add(azmGroup);
 
+        // Compass Ring
+        const ringGeom = new THREE.RingGeometry(0.45, 0.5, 64);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x414868, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(ringGeom, ringMat);
+        ring.rotation.x = Math.PI / 2;
+        scene.add(ring);
+
+        // N/S/E/W markers
+        function createText(text, pos) {
+            // Using simple shapes as placeholders for text labels
+            const marker = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({color: 0x7aa2f7}));
+            marker.position.copy(pos);
+            scene.add(marker);
+        }
+        createText("N", new THREE.Vector3(0, 0, 0.6));
+
         // Fork Arm (Vertical)
         const arm = new THREE.Mesh(new THREE.BoxGeometry(geo.arm_thickness, geo.fork_height, 0.18), mountMaterial);
         arm.position.set(geo.fork_width, geo.fork_height/2, 0);
@@ -197,19 +254,47 @@ INDEX_HTML = """
 
         // OTA
         const ota = new THREE.Mesh(new THREE.CylinderGeometry(geo.ota_radius, geo.ota_radius, geo.ota_length, 32), otaMaterial);
-        // Point OTA along Z-axis at Alt=0
         ota.rotation.x = Math.PI / 2;
         altGroup.add(ota);
 
         // Visual Back / Camera
         const cam = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, geo.camera_length), cameraMaterial);
-        // Position at the back of the OTA (negative Z)
         cam.position.set(0, 0, -geo.ota_length/2 - geo.camera_length/2);
         altGroup.add(cam);
 
         camera.position.set(1.5, 1.5, 1.5);
         controls.target.set(0, 0.5, 0);
         controls.update();
+
+        // Sky View Canvas
+        const skyCanvas = document.getElementById('sky-canvas');
+        const ctx = skyCanvas.getContext('2d');
+
+        function drawSky(stars) {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, 200, 200);
+            
+            // Draw crosshair
+            ctx.strokeStyle = '#414868';
+            ctx.beginPath();
+            ctx.moveTo(100, 80); ctx.lineTo(100, 120);
+            ctx.moveTo(80, 100); ctx.lineTo(120, 100);
+            ctx.stroke();
+
+            stars.forEach(s => {
+                const px = 100 + s.x * 100;
+                const py = 100 - s.y * 100;
+                const size = Math.max(1, 5 - s.mag);
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(px, py, size, 0, pi*2);
+                ctx.fill();
+                if (s.mag < 2) {
+                    ctx.font = '10px monospace';
+                    ctx.fillText(s.name, px + 5, py + 5);
+                }
+            });
+        }
 
         function animate() {
             requestAnimationFrame(animate);
@@ -234,12 +319,15 @@ INDEX_HTML = """
             azmGroup.rotation.y = -THREE.MathUtils.degToRad(data.azm);
             altGroup.rotation.x = -THREE.MathUtils.degToRad(data.alt);
 
-            // Simple Collision Detection
+            // Collision Detection
             const worldPos = new THREE.Vector3();
             cam.getWorldPosition(worldPos);
             const isCollision = (worldPos.y < geo.base_height + 0.05);
             document.getElementById('collision').style.display = isCollision ? 'block' : 'none';
             otaMaterial.color.setHex(isCollision ? 0xf7768e : 0x7aa2f7);
+
+            // Draw sky view
+            drawSky(data.stars || []);
         };
 
         window.addEventListener('resize', () => {

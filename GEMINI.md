@@ -1,8 +1,8 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v1.5.1)
+## Current Project Status (v1.6.0)
 
-The driver has achieved high functional parity with reference implementations and features a high-fidelity "Digital Twin" simulator with 3D visualization.
+The driver has achieved high functional parity with reference implementations and features a sophisticated "Digital Twin" simulator with 3D visualization and real-time schematic sky view.
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
@@ -15,7 +15,7 @@ The driver has achieved high functional parity with reference implementations an
 *   ✅ **Homing:** Support for automated homing and leveling.
 *   ✅ **Peripherals:** Support for Focuser, GPS, and Power/Battery telemetry.
 *   ✅ **Validation:** Dedicated hardware (HIT) and photography (PPT) testing routines.
-*   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI, tunable imperfections, and **3D Web Console**.
+*   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI, 3D Web Console, and **Schematic Sky View**.
 *   ✅ **Packaging:** PyPI-ready structure with `src` layout, `pyproject.toml`, and optional `[web]` extras.
 *   ✅ **Testing:** 37+ automated tests covering all subsystems.
 

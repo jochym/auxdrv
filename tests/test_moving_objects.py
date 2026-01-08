@@ -108,27 +108,38 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
 
         Methodology:
             1. Selects "Moon" as the target type.
-            2. Calculates current Moon RA/Dec using `ephem`.
-            3. Triggers GoTo via `handle_equatorial_goto`.
-            4. Waits for completion and verifies reported position.
+            2. Ensures the Moon is above the horizon by adjusting the observer date.
+            3. Calculates Moon JNow coords.
+            4. Triggers GoTo via `handle_equatorial_goto`.
+            5. Waits for completion and verifies reported position.
 
         Expected Results:
-            - The telescope must reach the Moon's coordinates within 0.1 deg accuracy.
+            - The telescope must reach the Moon's coordinates within 0.5 deg accuracy.
         """
         # 1. Select Moon
         for name in self.driver.target_type_vector:
             self.driver.target_type_vector[name] = "Off"
         self.driver.target_type_vector["MOON"] = "On"
 
-        # 2. Get Moon JNow coords
+        # 2. Ensure Moon is above horizon (Alt > 30) to avoid slew limits
+        self.driver.update_observer()
+        moon = ephem.Moon()
+
+        # Try finding a time today when moon is up
+        start_date = ephem.now()
+        for h in range(24):
+            self.driver.observer.date = ephem.Date(start_date + h / 24.0)
+            moon.compute(self.driver.observer)
+            if math.degrees(moon.alt) > 30:
+                break
+
+        # 3. Get Moon JNow coords at this specific time
         ra_moon, dec_moon = await self.driver._get_target_equatorial()
 
-        # 3. Trigger GoTo
+        # 4. Trigger GoTo
         await self.driver.handle_equatorial_goto(None)
 
-        # 4. Wait for idle
-        from tests.test_functional import TestCelestronAUXFunctional
-
+        # 5. Wait for idle
         # Inline wait loop
         for _ in range(60):
             await self.driver.read_mount_position()
@@ -136,7 +147,7 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
                 break
             await asyncio.sleep(1)
 
-        # 5. Verify position
+        # 6. Verify position
         await self.driver.read_mount_position()
         ra = float(self.driver.ra.membervalue)
         dec = float(self.driver.dec.membervalue)

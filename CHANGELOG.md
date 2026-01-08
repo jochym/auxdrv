@@ -2,14 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.5.1] - 2026-01-08
+## [1.6.0] - 2026-01-08
+
+### Added
+- **Visual Digital Twin Enhancements**:
+  - Added **Angle Indicators**: Compass ring and N/S markers in the 3D view.
+  - Added **Schematic Sky View**: A real-time 10° field-of-view display showing nearby bright stars (using `ephem` data).
+  - Expanded Telemetry: Added velocities and power consumption to the web console.
+- **Improved Packaging**: Support for `[simulator]` and `[web]` optional extras.
 
 ### Fixed
-- **Simulator Rate Bug**: Fixed an issue where the simulator continued reporting non-zero velocities after hitting a physical altitude limit.
-- **GoTo Termination**: Improved GoTo logic to correctly terminate when reaching a mechanical limit, even if the target is beyond it.
-- **3D Geometry**: Fixed OTA orientation in the web console; it is now correctly perpendicular to the altitude axis.
+- Refined Evolution 8" dimensions for better faithfulness to real hardware.
+- Synchronized coordinate systems between physics engine and 3D visualization.
 
-## [1.5.0] - 2026-01-07
+## [1.5.1] - 2026-01-08
 
 ### Added
 - **Web Console & Digital Twin**: Implemented an optional 3D visualization console using Three.js and FastAPI.

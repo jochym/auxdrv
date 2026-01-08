@@ -13,11 +13,11 @@
 ### Completed Tasks ✅
 - **Phase 1-12**: Core Driver, Alignment, Safety, Parity.
 - **Phase 13**: Internal Server & Release Polish.
-- **Phase 16**: Web Console & Digital Twin (v1.5.1)
+- **Phase 16**: Web Console & Digital Twin (v1.6.0)
   - Refactored `pyproject.toml` for optional dependencies (`[simulator]`, `[web]`).
   - Implemented 3D Web Console using FastAPI, WebSockets, and Three.js.
-  - Added simplified Evolution 8 model with real-time movement visualization.
-  - Fixed simulator bug where rates were not zeroed at mechanical limits.
+  - Added high-fidelity Evolution 8 model with angle indicators.
+  - Implemented real-time Schematic Sky View showing nearby bright stars.
   - Standardized 3D geometry and expanded telemetry (RA/Dec, Power, Speed).
 - **Packaging**: Standardized `src` layout.
 - **I18n**: Project translated to English for public release.
