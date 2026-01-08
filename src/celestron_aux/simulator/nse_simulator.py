@@ -251,13 +251,13 @@ async def main_async():
         try:
             from .web_console import WebConsole
 
-            web = WebConsole(telescope, host=args.web_host, port=args.web_port)
+            web = WebConsole(telescope, obs, host=args.web_host, port=args.web_port)
             web.run()
         except (ImportError, ValueError):
             try:
                 from web_console import WebConsole
 
-                web = WebConsole(telescope, host=args.web_host, port=args.web_port)
+                web = WebConsole(telescope, obs, host=args.web_host, port=args.web_port)
                 web.run()
             except ImportError:
                 print("Error: Web dependencies (fastapi, uvicorn) not installed.")
