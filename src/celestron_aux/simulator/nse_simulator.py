@@ -227,6 +227,11 @@ async def main_async():
         default=sim_cfg.get("web_port", 8080),
         help="Web console port",
     )
+    parser.add_argument(
+        "--web-host",
+        default=sim_cfg.get("web_host", "127.0.0.1"),
+        help="Web console host (default: 127.0.0.1)",
+    )
     args = parser.parse_args()
 
     global telescope
@@ -246,13 +251,13 @@ async def main_async():
         try:
             from .web_console import WebConsole
 
-            web = WebConsole(telescope, port=args.web_port)
+            web = WebConsole(telescope, host=args.web_host, port=args.web_port)
             web.run()
         except (ImportError, ValueError):
             try:
                 from web_console import WebConsole
 
-                web = WebConsole(telescope, port=args.web_port)
+                web = WebConsole(telescope, host=args.web_host, port=args.web_port)
                 web.run()
             except ImportError:
                 print("Error: Web dependencies (fastapi, uvicorn) not installed.")
