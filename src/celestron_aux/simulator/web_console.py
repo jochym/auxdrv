@@ -35,7 +35,7 @@ class WebConsole:
                 "fork_height": 0.42,
                 "fork_width": 0.22,
                 "arm_thickness": 0.1,
-                "ota_radius": 0.125,  # Slightly larger for better visual 8" look
+                "ota_radius": 0.125,
                 "ota_length": 0.43,
                 "camera_length": 0.12,
             },
@@ -155,9 +155,9 @@ INDEX_HTML = """
     <title>Celestron AUX 3D Console</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
-        #info { position: absolute; top: 10px; left: 10px; background: rgba(26, 27, 38, 0.8); padding: 15px; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 280px; }
-        #sky-view { position: absolute; top: 10px; right: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 300px; height: 300px; border-radius: 50%; overflow: hidden; }
-        #controls { position: absolute; bottom: 10px; left: 10px; color: #565f89; font-size: 12px; }
+        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 250px; font-size: 1.2vw; }
+        #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 40vh; height: 40vh; border-radius: 50%; overflow: hidden; }
+        #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 1vw; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
         .cyan { color: #7dcfff; }
@@ -165,15 +165,15 @@ INDEX_HTML = """
         .blue { color: #7aa2f7; }
         .yellow { color: #e0af68; }
         .magenta { color: #bb9af7; }
-        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .sky-label { position: absolute; bottom: 5px; width: 100%; text-align: center; font-size: 10px; color: #565f89; pointer-events: none; }
+        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 0.5vh; }
+        .sky-label { position: absolute; bottom: 1vh; width: 100%; text-align: center; font-size: 1.2vh; color: #565f89; pointer-events: none; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <div id="info">
-        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px;">AUX Digital Twin</h2>
+        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px; font-size: 1.5vw;">AUX Digital Twin</h2>
         <div id="telemetry">
             <div class="telemetry-row"><span>AZM:</span> <span id="azm" class="cyan">0.00</span>° (<span id="v_azm" class="blue">0.0</span>°/s)</div>
             <div class="telemetry-row"><span>ALT:</span> <span id="alt" class="cyan">0.00</span>° (<span id="v_alt" class="blue">0.0</span>°/s)</div>
@@ -187,7 +187,7 @@ INDEX_HTML = """
         </div>
     </div>
     <div id="sky-view">
-        <canvas id="sky-canvas" width="300" height="300"></canvas>
+        <canvas id="sky-canvas"></canvas>
         <div class="sky-label">FOV 30°</div>
     </div>
     <div id="controls">Mouse: Rotate | Scroll: Zoom | Right Click: Pan</div>
@@ -215,17 +215,17 @@ INDEX_HTML = """
         function createLabel(text, color = '#7aa2f7') {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 64;
-            canvas.height = 64;
+            canvas.width = 128;
+            canvas.height = 128;
             ctx.fillStyle = color;
-            ctx.font = 'bold 32px monospace';
+            ctx.font = 'bold 18px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(text, 32, 32);
+            ctx.fillText(text, 64, 64);
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(0.2, 0.2, 1);
+            sprite.scale.set(0.1, 0.1, 1);
             return sprite;
         }
 
@@ -234,33 +234,46 @@ INDEX_HTML = """
         const otaMaterial = new THREE.MeshPhongMaterial({ color: 0x7aa2f7 });
         const cameraMaterial = new THREE.MeshPhongMaterial({ color: 0xbb9af7 });
         const scaleMaterial = new THREE.LineBasicMaterial({ color: 0x565f89 });
+        const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xf7768e });
 
         // Base
         const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, geo.base_height, 32), mountMaterial);
         base.position.y = geo.base_height / 2;
         scene.add(base);
 
-        // Azimuth Scale (Ticks every 10 deg)
-        const azTicks = new THREE.Group();
+        // Azimuth Scale (Stationary)
+        const azScale = new THREE.Group();
         for (let i = 0; i < 360; i += 10) {
             const isMajor = i % 30 === 0;
-            const length = isMajor ? 0.1 : 0.05;
+            const length = isMajor ? 0.08 : 0.04;
             const tickGeom = new THREE.BufferGeometry().setFromPoints([
                 new THREE.Vector3(0.45, 0, 0),
                 new THREE.Vector3(0.45 + length, 0, 0)
             ]);
             const tick = new THREE.Line(tickGeom, scaleMaterial);
-            tick.rotation.y = THREE.MathUtils.degToRad(-i);
-            azTicks.add(tick);
+            // Azimuth 0 is North (Z+)
+            tick.rotation.y = THREE.MathUtils.degToRad(-(i - 90));
+            azScale.add(tick);
             
             if (isMajor) {
                 const label = createLabel(i.toString(), '#565f89');
-                label.position.set(Math.cos(THREE.MathUtils.degToRad(i)) * 0.65, 0, -Math.sin(THREE.MathUtils.degToRad(i)) * 0.65);
-                azTicks.add(label);
+                const angle = THREE.MathUtils.degToRad(-(i - 90));
+                label.position.set(Math.cos(angle) * 0.6, 0, Math.sin(angle) * 0.6);
+                azScale.add(label);
             }
         }
-        azTicks.position.y = geo.base_height;
-        scene.add(azTicks);
+        azScale.position.y = geo.base_height;
+        scene.add(azScale);
+
+        // Azimuth Group (Rotates around Y)
+        const azmGroup = new THREE.Group();
+        azmGroup.position.y = geo.base_height;
+        scene.add(azmGroup);
+
+        // Azimuth Indicator Dot (Points along viewing direction - Z+)
+        const azDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
+        azDot.position.set(0, 0.02, 0.45);
+        azmGroup.add(azDot);
 
         // Cardinal points
         const cardinalN = createLabel("N", "#f7768e"); cardinalN.position.set(0, geo.base_height, 0.8); scene.add(cardinalN);
@@ -268,48 +281,49 @@ INDEX_HTML = """
         const cardinalE = createLabel("E", "#7aa2f7"); cardinalE.position.set(0.8, geo.base_height, 0); scene.add(cardinalE);
         const cardinalW = createLabel("W", "#7aa2f7"); cardinalW.position.set(-0.8, geo.base_height, 0); scene.add(cardinalW);
 
-        // Azimuth Group (Rotates around Y)
-        const azmGroup = new THREE.Group();
-        azmGroup.position.y = geo.base_height;
-        scene.add(azmGroup);
-
-        // Fork Arm (Vertical)
+        // Fork Arm
         const arm = new THREE.Mesh(new THREE.BoxGeometry(geo.arm_thickness, geo.fork_height, 0.2), mountMaterial);
         arm.position.set(geo.fork_width, geo.fork_height/2, 0);
         azmGroup.add(arm);
 
-        // Pivot Axis (Horizontal connector)
+        // Pivot Axis
         const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, geo.fork_width, 16), mountMaterial);
         pivot.rotation.z = Math.PI / 2;
         pivot.position.set(geo.fork_width/2, geo.fork_height * 0.8, 0);
         azmGroup.add(pivot);
 
-        // Altitude Scale (Ticks every 10 deg)
-        const altTicks = new THREE.Group();
+        // Altitude Scale (Stationary relative to Fork)
+        const altScale = new THREE.Group();
+        const altRadius = 0.3;
         for (let i = -20; i <= 90; i += 10) {
             const isMajor = i % 30 === 0;
-            const length = isMajor ? 0.1 : 0.05;
+            const length = isMajor ? 0.08 : 0.04;
+            const rad = THREE.MathUtils.degToRad(i);
             const tickGeom = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0.25),
-                new THREE.Vector3(0, length, 0.25)
+                new THREE.Vector3(0, Math.sin(rad) * altRadius, Math.cos(rad) * altRadius),
+                new THREE.Vector3(0, Math.sin(rad) * (altRadius + length), Math.cos(rad) * (altRadius + length))
             ]);
             const tick = new THREE.Line(tickGeom, scaleMaterial);
-            tick.position.set(geo.fork_width + geo.arm_thickness/2, geo.fork_height * 0.8, 0);
-            tick.rotation.x = THREE.MathUtils.degToRad(-i);
-            altTicks.add(tick);
+            altScale.add(tick);
             
             if (isMajor) {
                 const label = createLabel(i.toString(), '#565f89');
-                label.position.set(geo.fork_width + 0.15, geo.fork_height * 0.8 + Math.sin(THREE.MathUtils.degToRad(i)) * 0.4, Math.cos(THREE.MathUtils.degToRad(i)) * 0.4);
-                altTicks.add(label);
+                label.position.set(0.05, Math.sin(rad) * (altRadius + 0.15), Math.cos(rad) * (altRadius + 0.15));
+                altScale.add(label);
             }
         }
-        azmGroup.add(altTicks);
+        altScale.position.set(geo.fork_width + geo.arm_thickness/2, geo.fork_height * 0.8, 0);
+        azmGroup.add(altScale);
 
-        // Altitude Group (Rotates around X in local space)
+        // Altitude Group (Rotates around X)
         const altGroup = new THREE.Group();
         altGroup.position.set(0, geo.fork_height * 0.8, 0);
         azmGroup.add(altGroup);
+
+        // Altitude Indicator Dot
+        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
+        altDot.position.set(geo.fork_width + geo.arm_thickness/2 + 0.02, 0, altRadius);
+        altGroup.add(altDot);
 
         // OTA
         const ota = new THREE.Mesh(new THREE.CylinderGeometry(geo.ota_radius, geo.ota_radius, geo.ota_length, 32), otaMaterial);
@@ -329,6 +343,14 @@ INDEX_HTML = """
         const skyCanvas = document.getElementById('sky-canvas');
         const ctx = skyCanvas.getContext('2d');
 
+        function resizeSky() {
+            const container = document.getElementById('sky-view');
+            skyCanvas.width = container.clientWidth;
+            skyCanvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resizeSky);
+        resizeSky();
+
         function drawSky(stars) {
             const w = skyCanvas.width;
             const h = skyCanvas.height;
@@ -337,28 +359,27 @@ INDEX_HTML = """
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, w, h);
             
-            // Draw crosshair
             ctx.strokeStyle = '#414868';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(center, center - 30); ctx.lineTo(center, center + 30);
-            ctx.moveTo(center - 30, center); ctx.lineTo(center + 30, center);
+            ctx.moveTo(center, center - center*0.1); ctx.lineTo(center, center + center*0.1);
+            ctx.moveTo(center - center*0.1, center); ctx.lineTo(center + center*0.1, center);
             ctx.stroke();
 
             stars.forEach(s => {
                 const px = center + s.x * center;
                 const py = center - s.y * center;
-                // Clip stars outside circular FOV
                 const dist = Math.sqrt(Math.pow(px-center, 2) + Math.pow(py-center, 2));
                 if (dist > center) return;
 
-                const size = Math.max(1, 7 - s.mag);
+                const size = Math.max(1, (7 - s.mag) * (w/600));
                 ctx.fillStyle = 'white';
                 ctx.beginPath();
                 ctx.arc(px, py, size, 0, Math.PI*2);
                 ctx.fill();
                 if (s.mag < 2.5) {
-                    ctx.font = '12px monospace';
-                    ctx.fillText(s.name, px + 5, py + 5);
+                    ctx.font = (14 * (w/600)) + 'px monospace';
+                    ctx.fillText(s.name, px + 8, py + 8);
                 }
             });
         }
@@ -369,7 +390,6 @@ INDEX_HTML = """
         }
         animate();
 
-        // WebSocket handling
         const ws = new WebSocket('ws://' + window.location.host + '/ws');
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
@@ -382,18 +402,15 @@ INDEX_HTML = """
             document.getElementById('pwr').innerText = data.voltage.toFixed(1) + 'V (' + data.current.toFixed(1) + 'A)';
             document.getElementById('status').innerText = data.slewing ? 'SLEWING' : (data.guiding ? 'TRACKING' : 'IDLE');
 
-            // Apply rotations
             azmGroup.rotation.y = -THREE.MathUtils.degToRad(data.azm);
             altGroup.rotation.x = -THREE.MathUtils.degToRad(data.alt);
 
-            // Collision Detection
             const worldPos = new THREE.Vector3();
             cam.getWorldPosition(worldPos);
             const isCollision = (worldPos.y < geo.base_height + 0.05);
             document.getElementById('collision').style.display = isCollision ? 'block' : 'none';
             otaMaterial.color.setHex(isCollision ? 0xf7768e : 0x7aa2f7);
 
-            // Draw sky view
             drawSky(data.stars || []);
         };
 
