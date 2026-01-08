@@ -4,11 +4,18 @@ import os
 import termios
 import tty
 import argparse
+import yaml
 from datetime import datetime
 
 # Simple INDI XML templates
 GET_PROPS = '<getProperties version="1.7" />\n'
-ENABLE_BLOB = '<enableBLOB device="Celestron AUX">Also</enableBLOB>\n'
+
+
+def load_config(config_path):
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    return {}
 
 
 class HITValidation:
@@ -17,13 +24,16 @@ class HITValidation:
     Safety-first interactive validation routine.
     """
 
-    def __init__(self, host="localhost", port=7624):
+    def __init__(
+        self, host="localhost", port=7624, device="Celestron AUX", config=None
+    ):
         self.host = host
         self.port = port
+        self.device = device
+        self.config = config or {}
         self.reader = None
         self.writer = None
         self.abort_event = asyncio.Event()
-        self.device = "Celestron AUX"
 
     async def connect(self):
         print(f"Connecting to INDI server at {self.host}:{self.port}...")
@@ -39,12 +49,11 @@ class HITValidation:
             print(f"Connection failed: {e}")
             return False
 
-    async def send_prop(self, property_name, members, type="new"):
+    async def send_prop(self, property_name, members):
         """Sends a newProperty or switch command."""
         if not self.writer:
             return
 
-        # Simple hacky XML generator for common cases
         if property_name == "CONNECTION":
             xml = f'<newSwitchVector device="{self.device}" name="CONNECTION">\n'
             for k, v in members.items():
@@ -92,9 +101,8 @@ class HITValidation:
     async def monitor_abort(self):
         """Background task to watch for Space key."""
         while not self.abort_event.is_set():
-            # Use run_in_executor for blocking read
             loop = asyncio.get_event_loop()
-            key = await loop.run_in_executor(None, sys.stdin.read, 1)
+            key = await loop.run_in_executor(None, self._get_char_raw)
             if key == " " or key == "\x03":  # Space or Ctrl+C
                 await self.abort()
                 break
@@ -105,8 +113,6 @@ class HITValidation:
         print("Press [Enter] to proceed, [Space] to ABORT and EXIT.")
 
         while True:
-            # Note: sys.stdin.read(1) might be tricky in raw mode within asyncio loop
-            # But for a validation script it's acceptable if the loop is otherwise waiting
             loop = asyncio.get_event_loop()
             ch = await loop.run_in_executor(None, self._get_char_raw)
 
@@ -140,13 +146,13 @@ class HITValidation:
             print("\nPhase 1: Connection Audit")
             await self.send_prop("CONNECTION", {"CONNECT": "On", "DISCONNECT": "Off"})
             await asyncio.sleep(2)
-            print("Check: Did the driver connect successfully? (Look at server output)")
             if not await self.confirm("Connection established?"):
                 return
 
+            slew_rate = self.config.get("slew_rate", 2)
             # 2. Pulse Test N
-            print("\nPhase 2: Directional Pulse (North)")
-            await self.send_prop("SLEW_RATE", {"RATE": 2})
+            print(f"\nPhase 2: Directional Pulse (North) at Rate {slew_rate}")
+            await self.send_prop("SLEW_RATE", {"RATE": slew_rate})
             await self.send_prop(
                 "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "On", "SLEW_SOUTH": "Off"}
             )
@@ -158,7 +164,7 @@ class HITValidation:
                 return
 
             # 3. Pulse Test S
-            print("\nPhase 3: Directional Pulse (South)")
+            print(f"\nPhase 3: Directional Pulse (South) at Rate {slew_rate}")
             await self.send_prop(
                 "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "Off", "SLEW_SOUTH": "On"}
             )
@@ -169,11 +175,12 @@ class HITValidation:
             if not await self.confirm("Did the mount move SOUTH?"):
                 return
 
+            fast_slew_rate = self.config.get("fast_slew_rate", 9)
             # 4. High Speed Audit
-            print("\nPhase 4: Slew Speed Audit (Rate 9)")
+            print(f"\nPhase 4: Slew Speed Audit (Rate {fast_slew_rate})")
             if not await self.confirm("Ready for fast movement? Check cables!"):
                 return
-            await self.send_prop("SLEW_RATE", {"RATE": 9})
+            await self.send_prop("SLEW_RATE", {"RATE": fast_slew_rate})
             await self.send_prop(
                 "TELESCOPE_MOTION_WE", {"SLEW_WEST": "Off", "SLEW_EAST": "On"}
             )
@@ -181,14 +188,15 @@ class HITValidation:
             await self.send_prop(
                 "TELESCOPE_MOTION_WE", {"SLEW_WEST": "Off", "SLEW_EAST": "Off"}
             )
-            if not await self.confirm("Was that Rate 9 movement?"):
+            if not await self.confirm(f"Was that Rate {fast_slew_rate} movement?"):
                 return
 
+            goto_dist = self.config.get("goto_test_distance_deg", 5.0)
             # 5. GoTo Safety
-            print("\nPhase 5: Safe GoTo (5 degrees)")
-            # 5 degrees is ~233016 steps
+            print(f"\nPhase 5: Safe GoTo ({goto_dist} degrees)")
+            goto_steps = int((goto_dist / 360.0) * 16777216)
             await self.send_prop(
-                "TELESCOPE_ABSOLUTE_COORD", {"AZM_STEPS": 233016, "ALT_STEPS": 0}
+                "TELESCOPE_ABSOLUTE_COORD", {"AZM_STEPS": goto_steps, "ALT_STEPS": 0}
             )
             if not await self.confirm("GoTo in progress. Everything safe?"):
                 return
@@ -207,12 +215,26 @@ class HITValidation:
 
 
 if __name__ == "__main__":
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_config_path = os.path.join(base_dir, "config.yaml")
+
     parser = argparse.ArgumentParser(description="HIT Validation Script")
-    parser.add_argument("--host", default="localhost", help="INDI server host")
-    parser.add_argument("--port", type=int, default=7624, help="INDI server port")
+    parser.add_argument(
+        "--config", default=default_config_path, help="Path to config.yaml"
+    )
+    parser.add_argument("--host", help="INDI server host")
+    parser.add_argument("--port", type=int, help="INDI server port")
+    parser.add_argument("--device", help="Mount device name")
     args = parser.parse_args()
 
-    hit = HITValidation(host=args.host, port=args.port)
+    full_config = load_config(args.config)
+    hit_config = full_config.get("validation_hit", {})
+
+    host = args.host or hit_config.get("host", "localhost")
+    port = args.port or hit_config.get("port", 7624)
+    device = args.device or hit_config.get("device", "Celestron AUX")
+
+    hit = HITValidation(host=host, port=port, device=device, config=hit_config)
     try:
         asyncio.run(hit.run_test())
     except KeyboardInterrupt:

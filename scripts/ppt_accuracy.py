@@ -6,7 +6,15 @@ import time
 import math
 import argparse
 import re
+import yaml
 from datetime import datetime
+
+
+def load_config(config_path):
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            return yaml.safe_load(f)
+    return {}
 
 
 class PPTAccuracy:
@@ -21,11 +29,13 @@ class PPTAccuracy:
         port=7624,
         mount_device="Celestron AUX",
         camera_device="CCD Simulator",
+        config=None,
     ):
         self.host = host
         self.port = port
         self.mount_device = mount_device
         self.camera_device = camera_device
+        self.config = config or {}
         self.reader = None
         self.writer = None
         self.results = []  # List of (target_ra, target_dec, solved_ra, solved_dec, error)
@@ -61,10 +71,11 @@ class PPTAccuracy:
 
     async def capture_image(self, exposure=2.0):
         print(f"Capturing {exposure}s exposure...")
+        upload_prefix = self.config.get("upload_prefix", "ppt_capture")
         # 1. Set local path
         xml_path = f'''<newTextVector device="{self.camera_device}" name="UPLOAD_SETTINGS">
             <oneText name="UPLOAD_DIR">{os.getcwd()}</oneText>
-            <oneText name="UPLOAD_PREFIX">ppt_capture</oneText>
+            <oneText name="UPLOAD_PREFIX">{upload_prefix}</oneText>
         </newTextVector>\n'''
         # 2. Trigger exposure
         xml_exp = f'''<newNumberVector device="{self.camera_device}" name="CCD_EXPOSURE">
@@ -82,7 +93,7 @@ class PPTAccuracy:
         files = [
             f
             for f in os.listdir(".")
-            if f.startswith("ppt_capture") and f.endswith(".fits")
+            if f.startswith(upload_prefix) and f.endswith(".fits")
         ]
         if not files:
             return None
@@ -123,22 +134,24 @@ class PPTAccuracy:
             return
 
         print("\n--- Photography & Pointing Test (PPT) ---")
-        targets = [(2.0, 45.0), (10.0, 30.0), (18.0, 60.0)]
+        targets = self.config.get("targets", [(2.0, 45.0), (10.0, 30.0), (18.0, 60.0)])
+        exposure = self.config.get("exposure", 2.0)
 
         for ra, dec in targets:
             print(f"\nTarget: RA={ra}, Dec={dec}")
-            input("Press Enter to slew, or Ctrl+C to abort...")
+            print("Press Enter to slew, or Ctrl+C to abort...")
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, sys.stdin.readline)
+
             await self.slew_to(ra, dec)
 
-            filepath = await self.capture_image()
+            filepath = await self.capture_image(exposure=exposure)
             if not filepath:
                 print("Capture failed.")
                 continue
 
             s_ra, s_dec = self.solve_image(filepath)
             if s_ra is not None and s_dec is not None:
-                # Coordinate distance calculation
-                # Error in degrees = sqrt((deltaRA*cosDec)^2 + deltaDec^2)
                 error = (
                     math.sqrt(
                         ((ra - s_ra) * 15 * math.cos(math.radians(dec))) ** 2
@@ -166,18 +179,33 @@ class PPTAccuracy:
 
 
 if __name__ == "__main__":
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_config_path = os.path.join(base_dir, "config.yaml")
+
     parser = argparse.ArgumentParser(description="PPT Accuracy Script")
-    parser.add_argument("--host", default="localhost", help="INDI server host")
-    parser.add_argument("--port", type=int, default=7624, help="INDI server port")
-    parser.add_argument("--mount", default="Celestron AUX", help="Mount device name")
-    parser.add_argument("--camera", default="CCD Simulator", help="Camera device name")
+    parser.add_argument(
+        "--config", default=default_config_path, help="Path to config.yaml"
+    )
+    parser.add_argument("--host", help="INDI server host")
+    parser.add_argument("--port", type=int, help="INDI server port")
+    parser.add_argument("--mount", help="Mount device name")
+    parser.add_argument("--camera", help="Camera device name")
     args = parser.parse_args()
 
+    full_config = load_config(args.config)
+    ppt_config = full_config.get("validation_ppt", {})
+
+    host = args.host or ppt_config.get("host", "localhost")
+    port = args.port or ppt_config.get("port", 7624)
+    mount = args.mount or ppt_config.get("mount_device", "Celestron AUX")
+    camera = args.camera or ppt_config.get("camera_device", "CCD Simulator")
+
     ppt = PPTAccuracy(
-        host=args.host,
-        port=args.port,
-        mount_device=args.mount,
-        camera_device=args.camera,
+        host=host,
+        port=port,
+        mount_device=mount,
+        camera_device=camera,
+        config=ppt_config,
     )
     try:
         asyncio.run(ppt.run_ppt())

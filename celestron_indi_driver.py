@@ -28,6 +28,7 @@ import yaml
 import os
 import math
 import numpy as np
+import argparse
 
 # Import AUX protocol implementation
 from celestron_aux_driver import (
@@ -48,7 +49,8 @@ from alignment import (
 )
 
 # Load configuration
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 DEFAULT_CONFIG = {
     "observer": {"latitude": 50.1822, "longitude": 19.7925, "elevation": 400}
 }
@@ -67,6 +69,7 @@ def load_config():
 
 config = load_config()
 obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
+drv_cfg = config.get("driver", {})
 
 
 def apply_refraction(alt_deg):
@@ -201,9 +204,19 @@ class CelestronAUXDriver(IPyDriver):
         )
 
         # Port settings
-        self.port_name = TextMember("PORT_NAME", "Port Name", "/dev/ttyUSB0")
+        self.port_name = TextMember(
+            "PORT_NAME",
+            "Port Name",
+            os.environ.get("PORT", drv_cfg.get("port", "/dev/ttyUSB0")),
+        )
         self.baud_rate = NumberMember(
-            "BAUD_RATE", "Baud Rate", "%d", "9600", "115200", "1", "19200"
+            "BAUD_RATE",
+            "Baud Rate",
+            "%d",
+            "9600",
+            "115200",
+            "1",
+            os.environ.get("BAUD", str(drv_cfg.get("baud", 19200))),
         )
         self.port_vector = TextVector(
             "PORT", "Serial Port", "Main", "rw", "Idle", [self.port_name]
@@ -647,7 +660,7 @@ class CelestronAUXDriver(IPyDriver):
         self.planet_venus = SwitchMember("VENUS", "Venus", "Off")
         self.planet_mars = SwitchMember("MARS", "Mars", "On")
         self.planet_jupiter = SwitchMember("JUPITER", "Jupiter", "Off")
-        self.planet_saturn = SwitchMember("SATURN", "Saturn", "Off")
+        self.planet_saturn = SwitchMember("SATURN", "SATURN", "Off")
         self.planet_uranus = SwitchMember("URANUS", "Uranus", "Off")
         self.planet_neptune = SwitchMember("NEPTUNE", "Neptune", "Off")
         self.planet_pluto = SwitchMember("PLUTO", "Pluto", "Off")
@@ -1759,5 +1772,13 @@ class CelestronAUXDriver(IPyDriver):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Celestron AUX INDI Driver")
+    parser.add_argument(
+        "--port",
+        type=int,
+        help="Standalone INDI server port (Not supported in current indipydriver)",
+    )
+    args = parser.parse_args()
+
     driver = CelestronAUXDriver()
     asyncio.run(driver.asyncrun())

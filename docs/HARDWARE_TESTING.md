@@ -7,6 +7,7 @@ Follow these steps to safely verify the Celestron AUX driver with real hardware.
   ```bash
   pip install -r requirements.txt
   ```
+- **Configuration**: Review and edit `config.yaml` to match your hardware setup.
 - **ASTAP (for PPT only)**: Install ASTAP and at least the H17 star database.
 - **Hardware**: Mount connected via Serial (USB) or Network (WiFi/Ethernet).
 
@@ -16,17 +17,28 @@ Follow these steps to safely verify the Celestron AUX driver with real hardware.
 
 This test ensures the mount moves correctly and safely.
 
-1.  **Start the INDI Server**:
-    Run the driver. It will act as an INDI server on port 7624.
+1.  **Configure `config.yaml`**:
+    Update the `validation_hit` section:
+    ```yaml
+    validation_hit:
+      host: "localhost"
+      port: 7624
+      device: "Celestron AUX"
+      slew_rate: 2
+      fast_slew_rate: 9
+      goto_test_distance_deg: 5.0
+    ```
+2.  **Start the INDI Server**:
+    Run the driver. By default, it uses the port specified in `driver` section of `config.yaml`.
     ```bash
     python celestron_indi_driver.py
     ```
-2.  **Configure the Connection**:
+3.  **Perform the Audit**:
     Open another terminal and run the HIT script:
     ```bash
     python scripts/hit_validation.py
     ```
-3.  **Perform the Audit**:
+    *(You can override the host/port/device using CLI arguments: `--host`, `--port`, `--device`)*
     - **Connection**: Confirm the script connects. Center the mount manually if needed.
     - **Safety Check**: Verify you have enough cable length for 360-degree rotation.
     - **Pulse N/S/E/W**: The script will pulse each direction. **Watch the mount**. Acknowledge in the CLI only if the physical motion matches the command.
@@ -39,17 +51,29 @@ This test ensures the mount moves correctly and safely.
 
 This test measures the absolute precision of the geometric model.
 
-1.  **Prepare the Setup**:
+1.  **Configure `config.yaml`**:
+    Update the `validation_ppt` section with your camera name and target grid:
+    ```yaml
+    validation_ppt:
+      host: "localhost"
+      port: 7624
+      mount_device: "Celestron AUX"
+      camera_device: "CCD Simulator"
+      exposure: 2.0
+      targets:
+        - [2.0, 45.0]
+        - [10.0, 30.0]
+        - [18.0, 60.0]
+    ```
+2.  **Prepare the Setup**:
     - Mount with Telescope and Camera attached.
     - Balanced and roughly polar aligned (if EQ).
     - Camera driver running (e.g., `indi_asi_ccd`).
-2.  **Initial Alignment**:
-    - Center a bright star.
-    - Plate-solve and **Sync** using your favorite planetarium (KStars/Ekos) OR let the PPT script handle it.
 3.  **Run PPT Script**:
     ```bash
-    python scripts/ppt_accuracy.py --camera "Your Camera Name"
+    python scripts/ppt_accuracy.py
     ```
+    *(You can override the camera using `--camera`)*
 4.  **Verification**:
     - The script will slew to several targets.
     - At each stop, it captures an image and invokes ASTAP.
