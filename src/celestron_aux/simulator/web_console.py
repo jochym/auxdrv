@@ -155,8 +155,9 @@ INDEX_HTML = """
     <title>Celestron AUX 3D Console</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
-        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 200px; font-size: 1.1vw; }
+        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 25vw; min-width: 250px; font-size: 1.1vw; }
         #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 30vh; height: 30vh; border-radius: 50%; overflow: hidden; }
+        #zoom-view { position: absolute; bottom: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.9); border: 2px solid #f7768e; width: 30vh; height: 30vh; border-radius: 4px; overflow: hidden; }
         #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 1vw; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
@@ -190,6 +191,10 @@ INDEX_HTML = """
         <canvas id="sky-canvas"></canvas>
         <div class="sky-label">FOV 30°</div>
     </div>
+    <div id="zoom-view">
+        <canvas id="zoom-canvas"></canvas>
+        <div class="sky-label">ZOOM 1°</div>
+    </div>
     <div id="controls">Mouse: Rotate | Scroll: Zoom | Right Click: Pan</div>
     <script>
         const geo = MOUNT_GEOMETRY_PLACEHOLDER;
@@ -218,14 +223,14 @@ INDEX_HTML = """
             canvas.width = 128;
             canvas.height = 128;
             ctx.fillStyle = color;
-            ctx.font = 'bold 72px monospace';
+            ctx.font = 'bold 36px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(text, 64, 64);
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(0.4, 0.4, 1);
+            sprite.scale.set(0.2, 0.2, 1);
             return sprite;
         }
 
@@ -339,44 +344,59 @@ INDEX_HTML = """
 
         // Sky View Canvas
         const skyCanvas = document.getElementById('sky-canvas');
-        const ctx = skyCanvas.getContext('2d');
+        const skyCtx = skyCanvas.getContext('2d');
+        const zoomCanvas = document.getElementById('zoom-canvas');
+        const zoomCtx = zoomCanvas.getContext('2d');
 
         function resizeSky() {
-            const container = document.getElementById('sky-view');
-            skyCanvas.width = container.clientWidth;
-            skyCanvas.height = container.clientHeight;
+            const skyCont = document.getElementById('sky-view');
+            skyCanvas.width = skyCont.clientWidth;
+            skyCanvas.height = skyCont.clientHeight;
+            const zoomCont = document.getElementById('zoom-view');
+            zoomCanvas.width = zoomCont.clientWidth;
+            zoomCanvas.height = zoomCont.clientHeight;
         }
         window.addEventListener('resize', resizeSky);
         resizeSky();
 
-        function drawSky(stars) {
-            const w = skyCanvas.width;
-            const h = skyCanvas.height;
+        function drawSkyView(ctx, canvas, stars, fov, isZoom = false) {
+            const w = canvas.width;
+            const h = canvas.height;
             const center = w / 2;
             
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, w, h);
             
-            ctx.strokeStyle = '#414868';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = isZoom ? '#f7768e' : '#414868';
+            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(center, center - center*0.1); ctx.lineTo(center, center + center*0.1);
-            ctx.moveTo(center - center*0.1, center); ctx.lineTo(center + center*0.1, center);
+            ctx.moveTo(center, center - center*0.2); ctx.lineTo(center, center + center*0.2);
+            ctx.moveTo(center - center*0.2, center); ctx.lineTo(center + center*0.2, center);
             ctx.stroke();
 
+            if (isZoom) {
+                // Draw 10' and 30' distance circles
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath(); ctx.arc(center, center, center * (10/60), 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(center, center, center * (30/60), 0, Math.PI*2); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
             stars.forEach(s => {
-                const px = center + s.x * center;
-                const py = center - s.y * center;
+                // Rescale stars for FOV
+                const scale = 30.0 / fov;
+                const px = center + s.x * center * scale;
+                const py = center - s.y * center * scale;
                 const dist = Math.sqrt(Math.pow(px-center, 2) + Math.pow(py-center, 2));
                 if (dist > center) return;
 
-                const size = Math.max(1, (7 - s.mag) * (w/600));
+                const size = Math.max(1, (isZoom ? 10 : 7 - s.mag) * (w/600));
                 ctx.fillStyle = 'white';
                 ctx.beginPath();
                 ctx.arc(px, py, size, 0, Math.PI*2);
                 ctx.fill();
-                if (s.mag < 2.5) {
-                    ctx.font = (14 * (w/600)) + 'px monospace';
+                if (s.mag < (isZoom ? 4 : 2.5)) {
+                    ctx.font = (12 * (w/600)) + 'px monospace';
                     ctx.fillText(s.name, px + 8, py + 8);
                 }
             });
@@ -409,7 +429,9 @@ INDEX_HTML = """
             document.getElementById('collision').style.display = isCollision ? 'block' : 'none';
             otaMaterial.color.setHex(isCollision ? 0xf7768e : 0x7aa2f7);
 
-            drawSky(data.stars || []);
+            // Draw sky views
+            drawSkyView(skyCtx, skyCanvas, data.stars || [], 30.0, false);
+            drawSkyView(zoomCtx, zoomCanvas, data.stars || [], 1.0, true);
         };
 
         window.addEventListener('resize', () => {
