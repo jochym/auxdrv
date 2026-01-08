@@ -155,8 +155,8 @@ INDEX_HTML = """
     <title>Celestron AUX 3D Console</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
-        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 250px; font-size: 0.75vw; }
-        #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 45vh; height: 45vh; border-radius: 50%; overflow: hidden; }
+        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 200px; font-size: 1.1vw; }
+        #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 30vh; height: 30vh; border-radius: 50%; overflow: hidden; }
         #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 1vw; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
@@ -173,7 +173,7 @@ INDEX_HTML = """
 </head>
 <body>
     <div id="info">
-        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px; font-size: 1.0vw;">AUX Digital Twin</h2>
+        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px; font-size: 1.5vw;">AUX Digital Twin</h2>
         <div id="telemetry">
             <div class="telemetry-row"><span>AZM:</span> <span id="azm" class="cyan">0.00</span>° (<span id="v_azm" class="blue">0.0</span>°/s)</div>
             <div class="telemetry-row"><span>ALT:</span> <span id="alt" class="cyan">0.00</span>° (<span id="v_alt" class="blue">0.0</span>°/s)</div>
@@ -218,14 +218,14 @@ INDEX_HTML = """
             canvas.width = 128;
             canvas.height = 128;
             ctx.fillStyle = color;
-            ctx.font = 'bold 36px monospace';
+            ctx.font = 'bold 72px monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(text, 64, 64);
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMaterial);
-            sprite.scale.set(0.2, 0.2, 1);
+            sprite.scale.set(0.4, 0.4, 1);
             return sprite;
         }
 
@@ -269,7 +269,7 @@ INDEX_HTML = """
         scene.add(azmGroup);
 
         // Azimuth Indicator Dot (Points along viewing direction - Z+)
-        const azDot = new THREE.Mesh(new THREE.SphereGeometry(0.025), indicatorMaterial);
+        const azDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
         azDot.position.set(0, 0.02, 0.45);
         azmGroup.add(azDot);
 
@@ -319,7 +319,7 @@ INDEX_HTML = """
         azmGroup.add(altGroup);
 
         // Altitude Indicator Dot (Moves with OTA)
-        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.025), indicatorMaterial);
+        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
         altDot.position.set(geo.fork_width + geo.arm_thickness/2 + 0.02, 0, altRadius);
         altGroup.add(altDot);
 
@@ -400,10 +400,7 @@ INDEX_HTML = """
             document.getElementById('pwr').innerText = data.voltage.toFixed(1) + 'V (' + data.current.toFixed(1) + 'A)';
             document.getElementById('status').innerText = data.slewing ? 'SLEWING' : (data.guiding ? 'TRACKING' : 'IDLE');
 
-            // Apply rotations
-            // Azimuth: Telescope Azm 0 is North (Z+). 
             azmGroup.rotation.y = -THREE.MathUtils.degToRad(data.azm);
-            // Altitude: 0 is Horizontal (Z+), 90 is Zenith (Y+).
             altGroup.rotation.x = -THREE.MathUtils.degToRad(data.alt);
 
             const worldPos = new THREE.Vector3();
