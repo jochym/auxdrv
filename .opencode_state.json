@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 12 - Periodic Error Correction (PEC)
+- **Current Phase**: Phase 12 - Peripheral Support & Plug & Play
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -25,16 +25,18 @@
 - **Phase 9**: Full Test Documentation
 - **Phase 10**: Simulator Imperfections
 - **Phase 11**: Advanced Calibration
-  - Implemented 6-parameter geometric mount model.
-  - Added spatial point thinning for even sky coverage.
-  - Implemented switchable atmospheric refraction correction.
-  - Added Calibration tab to INDI interface.
+- **Validation**: Hardware (HIT) and Photography (PPT) testing routines.
+- **Robustness**: Stabilized tests against external TUI simulators.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 12**: Periodic Error Correction (PEC)
-  - Planning implementation of software/hardware PEC.
+- **Phase 12**: Peripheral Support & Plug & Play
+  - Property tree audit and unification with `indi_celestron_gps`.
+  - Dynamic mount type detection (`MC_GET_MODEL`).
+  - RTC management.
 
 ### Pending Tasks 📋
-1. Implement Periodic Error Correction (PEC)
-2. Add support for cone error and non-perpendicularity compensation
+1. Implement Dynamic Model and Mount Type Detection
+2. Implement RTC management (Read/Write)
+3. Power/Voltage reporting
+4. Extended GPS module status

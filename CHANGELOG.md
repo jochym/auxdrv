@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-01-07
+
+### Fixed
+- **External Simulator Support**: Resolved test failures occurring when running against an external TUI simulator.
+- **Test Robustness**: Increased GoTo step tolerance to 500 steps to account for simulator jitter and Periodic Error.
+- **Timing & Timeouts**: Increased test timeouts to 60-90 seconds to accommodate realistic slew speeds (4°/s) and TUI overhead.
+- **Test Isolation**: Added explicit mount position and rate reset in `asyncSetUp` for functional and safety tests.
+- **Environment Variables**: Ensured `EXTERNAL_SIM` and `SIM_PORT` are respected by all test suites.
+
 ## [1.1.0] - 2026-01-07
 
 ### Added

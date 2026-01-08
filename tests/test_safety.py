@@ -23,12 +23,18 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
 
     sim_proc = None
     sim_port = 2002
+    external_sim = False
 
     @classmethod
     def setUpClass(cls):
         """
         Launches a dedicated simulator instance for safety tests.
         """
+        if os.environ.get("EXTERNAL_SIM"):
+            cls.external_sim = True
+            cls.sim_port = int(os.environ.get("SIM_PORT", 2000))
+            return
+
         cls.sim_log = open("test_safety_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
@@ -49,6 +55,8 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         """
         Terminates the simulator instance.
         """
+        if cls.external_sim:
+            return
         if cls.sim_proc:
             cls.sim_proc.terminate()
             cls.sim_proc.wait()
@@ -68,6 +76,28 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         self.driver.send = mock_send
         self.driver.conn_connect.membervalue = "On"
         await self.driver.handle_connection(None)
+
+        # Reset position to 0,0
+        if self.driver.communicator and self.driver.communicator.connected:
+            from celestron_aux_driver import pack_int3_steps
+            from celestron_indi_driver import AUXCommand, AUXCommands
+
+            cmd_azm = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.AZM,
+                pack_int3_steps(0),
+            )
+            cmd_alt = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.ALT,
+                pack_int3_steps(0),
+            )
+            await self.driver.communicator.send_command(cmd_azm)
+            await self.driver.communicator.send_command(cmd_alt)
+            await self.driver.slew_by_rate(AUXTargets.AZM, 0, 1)
+            await self.driver.slew_by_rate(AUXTargets.ALT, 0, 1)
 
     async def asyncTearDown(self):
         """

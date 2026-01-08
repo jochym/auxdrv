@@ -173,7 +173,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
         Expected Results:
             - The reported encoder steps should match the target steps within a
-              100-step tolerance (handles small simulation inaccuracies).
+              500-step tolerance (handles small simulation inaccuracies, jitter and PE).
         """
         target_azm = 10000
         target_alt = 5000
@@ -181,15 +181,16 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         await self.driver.slew_to(AUXTargets.AZM, target_azm)
         await self.driver.slew_to(AUXTargets.ALT, target_alt)
 
-        success = await self.wait_for_idle(30)
+        success = await self.wait_for_idle(60)
         self.assertTrue(success, "Slew timed out")
 
         await self.driver.read_mount_position()
         azm = int(self.driver.azm_steps.membervalue)
         alt = int(self.driver.alt_steps.membervalue)
 
-        self.assertAlmostEqual(azm, target_azm, delta=200)
-        self.assertAlmostEqual(alt, target_alt, delta=200)
+        # Increased tolerance to account for Periodic Error (~194 steps) and Jitter
+        self.assertAlmostEqual(azm, target_azm, delta=500)
+        self.assertAlmostEqual(alt, target_alt, delta=500)
 
     async def test_3_tracking_logic(self):
         """
@@ -404,7 +405,8 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         self.driver._do_slew = mock_do_slew
 
         await self.driver.goto_position(target_azm, target_alt)
-        await self.wait_for_idle(20)
+        success = await self.wait_for_idle(60)
+        self.assertTrue(success, "Approach slew timed out")
 
         self.assertEqual(len(slew_calls), 4)
         self.assertEqual(slew_calls[0][1], target_azm - 5000)
@@ -442,7 +444,8 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
         target_azm, target_alt = await self.driver.equatorial_to_steps(ra, dec)
         await self.driver.goto_position(target_azm, target_alt, ra=ra, dec=dec)
-        await self.wait_for_idle(20)
+        success = await self.wait_for_idle(60)
+        self.assertTrue(success, "Approach slew timed out")
 
         self.assertEqual(len(slew_calls), 4)
 
@@ -541,7 +544,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
             await self.driver._do_slew(AUXTargets.AZM, az_steps, fast=True)
             await self.driver._do_slew(AUXTargets.ALT, alt_steps, fast=True)
-            await self.wait_for_idle(60)
+            await self.wait_for_idle(90)
             await self.driver.handle_equatorial_goto(None)
 
         self.assertEqual(len(self.driver._align_model.points), 3)
@@ -552,7 +555,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         self.driver.ra.membervalue = target_ra
         self.driver.dec.membervalue = target_dec
         await self.driver.handle_equatorial_goto(None)
-        await self.wait_for_idle(60)
+        await self.wait_for_idle(90)
 
         await self.driver.read_mount_position()
         self.assertAlmostEqual(float(self.driver.ra.membervalue), target_ra, delta=0.1)

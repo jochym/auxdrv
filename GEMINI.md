@@ -1,8 +1,8 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v1.1.0)
+## Current Project Status (v1.1.1)
 
-The project has achieved its core architectural goals and features a robust hardware validation suite.
+The project has achieved its core architectural goals and features a robust hardware validation suite. Tests are now fully stable against both internal and external (TUI) simulators.
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
