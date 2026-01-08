@@ -7,3 +7,6 @@ simulator/*.txt
 simulator/*.log
 .pytest_cache/
 .indipydriver.xml
+dist/
+build/
+*.egg-info/
