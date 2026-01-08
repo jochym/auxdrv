@@ -30,6 +30,13 @@ import math
 import numpy as np
 import argparse
 
+try:
+    from indipyserver import IPyServer
+
+    HAS_SERVER = True
+except ImportError:
+    HAS_SERVER = False
+
 # Import AUX protocol implementation
 try:
     from .celestron_aux_driver import (
@@ -802,15 +809,15 @@ class CelestronAUXDriver(IPyDriver):
         if event.vectorname == "CONNECTION":
             await self.handle_connection(event)
         elif event.vectorname == "PORT":
-            self.port_vector.update(event.root)
+            self.port_vector.update(event)
             await self.port_vector.send_setVector(state="Ok")
         elif event.vectorname == "BAUD":
-            self.baud_vector.update(event.root)
+            self.baud_vector.update(event)
             await self.baud_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_SLEW_RATE":
             await self.handle_std_slew_rate(event)
         elif event.vectorname == "SLEW_RATE":
-            self.slew_rate_vector.update(event.root)
+            self.slew_rate_vector.update(event)
             await self.slew_rate_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_MOTION_NS":
             await self.handle_motion_ns(event)
@@ -827,27 +834,27 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "TELESCOPE_GUIDE_RATE":
             await self.handle_guide_rate(event)
         elif event.vectorname == "GEOGRAPHIC_COORD":
-            self.location_vector.update(event.root)
+            self.location_vector.update(event)
             self.update_observer()
             await self.write_location_to_mount()
             await self.location_vector.send_setVector(state="Ok")
         elif event.vectorname == "EQUATORIAL_EOD_COORD":
             await self.handle_equatorial_goto(event)
         elif event.vectorname == "GOTO_APPROACH_MODE":
-            self.approach_mode_vector.update(event.root)
+            self.approach_mode_vector.update(event)
             await self.approach_mode_vector.send_setVector(state="Ok")
         elif event.vectorname == "GOTO_APPROACH_OFFSET":
-            self.approach_offset_vector.update(event.root)
+            self.approach_offset_vector.update(event)
             await self.approach_offset_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_TRACK_MODE":
             await self.handle_track_mode(event)
         elif event.vectorname == "TELESCOPE_ON_COORD_SET":
-            self.coord_set_vector.update(event.root)
+            self.coord_set_vector.update(event)
             await self.coord_set_vector.send_setVector(state="Ok")
         elif event.vectorname == "ALIGNMENT_CONFIG":
             await self.handle_alignment_config(event)
         elif event.vectorname == "ALIGNMENT_PARAMS":
-            self.align_params_vector.update(event.root)
+            self.align_params_vector.update(event)
             await self.align_params_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_LIMITS":
             await self.handle_limits(event)
@@ -860,16 +867,16 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "GPS_REFRESH":
             await self.handle_gps_refresh(event)
         elif event.vectorname == "TARGET_TYPE":
-            self.target_type_vector.update(event.root)
+            self.target_type_vector.update(event)
             await self.target_type_vector.send_setVector(state="Ok")
         elif event.vectorname == "PLANET_SELECT":
-            self.planet_select_vector.update(event.root)
+            self.planet_select_vector.update(event)
             await self.planet_select_vector.send_setVector(state="Ok")
         elif event.vectorname == "TLE_DATA":
-            self.tle_data_vector.update(event.root)
+            self.tle_data_vector.update(event)
             await self.tle_data_vector.send_setVector(state="Ok")
         elif event.vectorname == "REFRACTION_CORRECTION":
-            self.refraction_vector.update(event.root)
+            self.refraction_vector.update(event)
             await self.refraction_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_ABORT_MOTION":
             await self.handle_abort_motion(event)
@@ -916,8 +923,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_abort_motion(self, event):
         """Immediately stops all mount movement."""
-        if event and event.root:
-            self.abort_motion_vector.update(event.root)
+        if event is not None:
+            self.abort_motion_vector.update(event)
         if self.abort_motion.membervalue == "On":
             if self.communicator and self.communicator.connected:
                 # Send Rate 0 to both axes
@@ -938,7 +945,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_cordwrap(self, event):
         """Enables or disables cord wrap prevention on the mount."""
-        self.cordwrap_vector.update(event.root)
+        if event is not None:
+            self.cordwrap_vector.update(event)
         if not self.communicator or not self.communicator.connected:
             return
 
@@ -954,7 +962,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_cordwrap_pos(self, event):
         """Sets the cord wrap prevention position on the mount."""
-        self.cordwrap_pos_vector.update(event.root)
+        if event is not None:
+            self.cordwrap_pos_vector.update(event)
         if not self.communicator or not self.communicator.connected:
             return
 
@@ -971,7 +980,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_focuser(self, event):
         """Moves the focuser to the specified position."""
-        self.focuser_vector.update(event.root)
+        if event is not None:
+            self.focuser_vector.update(event)
         if not self.communicator or not self.communicator.connected:
             return
 
@@ -989,7 +999,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_gps_refresh(self, event):
         """Manually refreshes location and time from the GPS module."""
-        self.gps_refresh_vector.update(event.root)
+        if event is not None:
+            self.gps_refresh_vector.update(event)
         if self.gps_refresh.membervalue == "On":
             await self.gps_refresh_vector.send_setVector(state="Busy")
             if await self.update_gps_data():
@@ -1053,8 +1064,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_connection(self, event):
         """Handles CONNECT/DISCONNECT switches."""
-        if event and event.root:
-            self.connection_vector.update(event.root)
+        if event:
+            self.connection_vector.update(event)
         if self.conn_connect.membervalue == "On":
             self.communicator = AUXCommunicator(
                 self.port_name.membervalue, int(self.baud_rate.membervalue)
@@ -1165,7 +1176,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_std_slew_rate(self, event):
         """Maps standard INDI slew rates to 1-9 scale."""
-        self.std_slew_rate_vector.update(event.root)
+        if event is not None:
+            self.std_slew_rate_vector.update(event)
         if self.slew_guide.membervalue == "On":
             self.slew_rate.membervalue = 1
         elif self.slew_centering.membervalue == "On":
@@ -1324,8 +1336,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_goto(self, event):
         """Handles GoTo command using raw encoder steps."""
-        if event and event.root:
-            self.absolute_coord_vector.update(event.root)
+        if event is not None:
+            self.absolute_coord_vector.update(event)
         await self.absolute_coord_vector.send_setVector(state="Busy")
 
         target_azm = int(self.target_azm.membervalue)
@@ -1347,8 +1359,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_alignment_config(self, event):
         """Handles clearing alignment or pruning."""
-        if event and event.root:
-            self.align_config_vector.update(event.root)
+        if event is not None:
+            self.align_config_vector.update(event)
         if self.align_clear_all.membervalue == "On":
             self._align_model.clear()
             self.align_clear_all.membervalue = "Off"
@@ -1379,8 +1391,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_park(self, event):
         """Moves the mount to the park position (0,0 steps)."""
-        if event and event.root:
-            self.park_vector.update(event.root)
+        if event is not None:
+            self.park_vector.update(event)
         if self.park_switch.membervalue == "On":
             await self.park_vector.send_setVector(state="Busy")
             if await self.goto_position(0, 0):
@@ -1394,8 +1406,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_unpark(self, event):
         """Clears the parked status."""
-        if event and event.root:
-            self.unpark_vector.update(event.root)
+        if event is not None:
+            self.unpark_vector.update(event)
         if self.unpark_switch.membervalue == "On":
             self.parked_light.membervalue = "Idle"
             await self.mount_status_vector.send_setVector()
@@ -1404,8 +1416,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_home(self, event):
         """Moves the mount to the home position (index or 0,0)."""
-        if event and event.root:
-            self.home_vector.update(event.root)
+        if event is not None:
+            self.home_vector.update(event)
 
         await self.home_vector.send_setVector(state="Busy")
 
@@ -1442,8 +1454,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_equatorial_goto(self, event):
         """Handles GoTo or Sync command using RA/Dec coordinates."""
-        if event and event.root:
-            self.equatorial_vector.update(event.root)
+        if event is not None:
+            self.equatorial_vector.update(event)
 
         target_ra, target_dec = await self._get_target_equatorial()
 
@@ -1651,8 +1663,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_track_mode(self, event):
         """Starts or stops tracking."""
-        if event and event.root:
-            self.track_mode_vector.update(event.root)
+        if event is not None:
+            self.track_mode_vector.update(event)
 
         if self.track_none.membervalue == "On":
             if self._tracking_task:
@@ -1794,12 +1806,35 @@ def main():
     parser.add_argument(
         "--port",
         type=int,
-        help="Standalone INDI server port (Not supported in current indipydriver)",
+        help="INDI server port (when running with --server)",
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="INDI server host (when running with --server)",
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Run an internal INDI server",
     )
     args = parser.parse_args()
 
     driver = CelestronAUXDriver()
-    asyncio.run(driver.asyncrun())
+
+    if args.server:
+        try:
+            from indipyserver import IPyServer
+        except ImportError:
+            print("Error: indipyserver not installed. Cannot run internal server.")
+            return
+        port = args.port or drv_cfg.get("indi_port", 7624)
+        server = IPyServer(driver, host=args.host, port=int(port))
+        print(f"Starting internal INDI server on {args.host}:{port}")
+        asyncio.run(server.asyncrun())
+    else:
+        # Standard INDI driver mode (stdin/stdout)
+        asyncio.run(driver.asyncrun())
 
 
 if __name__ == "__main__":

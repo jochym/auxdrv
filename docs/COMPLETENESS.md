@@ -57,3 +57,12 @@ The NSE Simulator is a high-fidelity tool for driver development.
 | **Stellarium Proto** | ✅ Done | Allows visual verification in planetarium. |
 | **Imperfections** | ✅ Done | Backlash, PE, Cone Error, Jitter simulation. |
 | **Discovery** | ✅ Done | UDP 55555 discovery support. |
+
+## 6. Packaging & Distribution
+
+| Feature | Status | Notes |
+| :--- | :--- | :--- |
+| **`src` Layout** | ✅ Done | Adheres to modern Python standards. |
+| **`pyproject.toml`** | ✅ Done | Build metadata and dependency management. |
+| **Entry Points** | ✅ Done | `indi-celestron-aux` and `celestron-aux-simulator` tools. |
+| **PyPI Readiness** | ✅ Done | Structured for future release. |

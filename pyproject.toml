@@ -14,6 +14,7 @@ authors = [
 ]
 dependencies = [
     "indipydriver>=3.0.4",
+    "indipyserver>=0.0.1",
     "pyserial-asyncio>=0.6",
     "ephem>=4.2",
     "pyyaml",

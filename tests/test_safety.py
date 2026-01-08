@@ -153,7 +153,8 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         """
         target_pos = 500000
         self.driver.focus_pos.membervalue = target_pos
-        event = type("obj", (object,), {"vectorname": "ABS_FOCUS_POSITION", "root": []})
+        # Mock event as a dictionary
+        event = {"FOCUS_POS": target_pos}
 
         await self.driver.handle_focuser(event)
 
@@ -181,7 +182,7 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             - Longitude should be approx 19.7925.
         """
         self.driver.gps_refresh.membervalue = "On"
-        event = type("obj", (object,), {"vectorname": "GPS_REFRESH", "root": []})
+        event = {"REFRESH": "On"}
         await self.driver.handle_gps_refresh(event)
 
         self.assertAlmostEqual(float(self.driver.lat.membervalue), 50.1822, delta=0.001)
@@ -203,7 +204,7 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             - The simulator must report that cord-wrap protection is enabled (0xFF).
         """
         self.driver.cordwrap_enable.membervalue = "On"
-        event = type("obj", (object,), {"vectorname": "TELESCOPE_CORDWRAP", "root": []})
+        event = {"ENABLED": "On", "DISABLED": "Off"}
         await self.driver.handle_cordwrap(event)
 
         # Verify simulator
