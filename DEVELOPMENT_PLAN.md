@@ -53,5 +53,14 @@ The driver will be packaged for PyPI to allow easy installation via standard too
 - [x] **Refactor to `src` layout**
 - [x] **Prepare `pyproject.toml`**
 - [x] **Standalone executable entry points**
-- [ ] **Internal INDI Server** (Optional)
-    - Consider using `indipyserver` to allow the driver to run as a network server without external `indiserver`.
+## 6. High-Fidelity Simulation & Digital Twin (Phase 16)
+Enable visual validation of mount behavior and safety logic.
+
+- [ ] **Web-based 3D Console**
+    - [ ] Create an optional web server using FastAPI/WebSockets.
+    - [ ] Develop a 3D visualization using Three.js (simplified Evolution 8 model).
+    - [ ] Implement collision visualization (detect camera hitting the base).
+    - [ ] Support configurable mount dimensions in `config.yaml`.
+- [ ] **Optional Packaging**
+    - [ ] Define `[simulator]` and `[web]` extras in `pyproject.toml`.
+    - [ ] Ensure conditional imports for heavy dependencies (Textual, FastAPI).

@@ -18,9 +18,19 @@ dependencies = [
     "pyserial-asyncio>=0.6",
     "ephem>=4.2",
     "pyyaml",
-    "textual>=1.0.0",
     "numpy>=1.24.0",
     "scipy>=1.10.0",
+]
+
+[project.optional-dependencies]
+simulator = [
+    "textual>=1.0.0",
+]
+web = [
+    "textual>=1.0.0",
+    "fastapi",
+    "uvicorn",
+    "websockets",
 ]
 
 [project.scripts]

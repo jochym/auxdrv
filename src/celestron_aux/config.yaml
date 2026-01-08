@@ -12,6 +12,7 @@ driver:
 simulator:
   aux_port: 2000
   stellarium_port: 10001
+  web_port: 8080
   imperfections:
     backlash_steps: 50
     periodic_error_arcsec: 15.0
@@ -21,6 +22,14 @@ simulator:
     refraction_enabled: true
     encoder_jitter_steps: 2
     clock_drift: 0.0001 # 0.01% drift
+  geometry:
+    # Dimensions in meters (standard Evolution 8)
+    base_height: 0.2
+    fork_height: 0.45
+    fork_width: 0.35
+    ota_radius: 0.12
+    ota_length: 0.45
+    camera_length: 0.15
 
 validation_hit:
   host: "localhost"

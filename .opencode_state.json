@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 13 - Internal Server & Release Polish
+- **Current Phase**: Phase 16 - Web Console & 3D Visualization
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -11,32 +11,22 @@
 ## Project Progress
 
 ### Completed Tasks ✅
-- **Phase 1**: Repository initialization
-- **Phase 2**: Simulator headless mode & TCP support
-- **Phase 2.5**: Functional Test Suite
-- **Phase 3**: Astronomical Transformations
-- **Phase 3.5**: Code Documentation
-- **Phase 4**: Anti-backlash GoTo logic
-- **Phase 5**: Advanced Predictive Tracking (2nd Order)
-- **Phase 5.5**: Modern TUI & Alignment System
-- **Phase 6**: Safety & Accessories
-- **Phase 7**: Moving Objects Support
-- **Phase 8**: Multi-Point SVD Alignment
-- **Phase 9**: Full Test Documentation
-- **Phase 10**: Simulator Imperfections
-- **Phase 11**: Advanced Calibration
-- **Validation**: Hardware (HIT) and Photography (PPT) testing routines.
-- **Robustness**: Stabilized tests against external TUI simulators.
-- **Phase 12**: Functional Parity
-- **Packaging**: Refactored to `src` layout, `pyproject.toml` and CLI entry points.
-- **Configuration**: Centralized all settings in `config.yaml`.
+- **Phase 1-12**: Core Driver, Alignment, Safety, Parity.
+- **Phase 13**: Internal Server & Release Polish.
+- **Phase 16**: Web Console & Digital Twin
+  - Refactored `pyproject.toml` for optional dependencies (`[simulator]`, `[web]`).
+  - Implemented 3D Web Console using FastAPI, WebSockets, and Three.js.
+  - Added simplified Evolution 8 model with real-time movement visualization.
+  - Implemented collision visualization (camera clearance check).
+  - Supported configurable mount dimensions in `config.yaml`.
+- **Packaging**: Standardized `src` layout.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 13**: Internal Server & Release Polish
-  - Integration of `indipyserver`.
+- **Hardware Testing**: Transitioning to physical validation.
 
 ### Pending Tasks 📋
-1. Implement internal INDI server mode.
-2. Implement Periodic Error Correction (PEC)
-3. Implement Hibernation mode
+1. Perform Hardware Interaction Test (HIT) on real mount.
+2. Perform Photography & Pointing Test (PPT).
+3. Periodic Error Correction (PEC) implementation.
+4. Hibernation mode.

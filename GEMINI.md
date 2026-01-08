@@ -23,11 +23,12 @@ The driver has achieved high functional parity with reference implementations an
 
 ## Development Roadmap
 
-### Phase 13: Internal Server & Release Polish (In Progress)
-*   Integration of `indipyserver` for standalone network operation.
-*   Finalizing documentation and PyPI distribution metadata.
+### Phase 16: Web Console & 3D Visualization (In Progress)
+*   Implementation of an optional digital twin for the simulator.
+*   3D visualization of mount movement using Three.js.
+*   Configurable mount geometry for collision detection.
 
-### Phase 14: Advanced Features (Planned)
+### Phase 17: Advanced Features (Planned)
 *   Periodic Error Correction (PEC).
 *   Hibernation mode.
 *   ✅ **Packaging:** PyPI-ready structure with `src` layout and `pyproject.toml`.
