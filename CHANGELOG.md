@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2026-01-07
+
+### Added
+- **PyPI Packaging**: Refactored project to modern `src` layout and added `pyproject.toml` for standard distribution.
+- **CLI Entry Points**: Added `indi-celestron-aux` and `celestron-aux-simulator` as standalone commands.
+- **Centralized Configuration**: All driver and validation settings are now managed via a single `config.yaml` with support for CLI and Environment overrides.
+
 ## [1.3.0] - 2026-01-07
 
 ### Added

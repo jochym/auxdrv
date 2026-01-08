@@ -1,8 +1,8 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v1.3.0)
+## Current Project Status (v1.4.0)
 
-The driver has achieved high functional parity with the reference C++ `indi-celestronaux` and official `indi_celestron_gps` drivers. It is now considered ready for comprehensive hardware and sky validation.
+The driver has achieved high functional parity with reference implementations and is structured as a professional, redistributable Python package.
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
@@ -16,7 +16,20 @@ The driver has achieved high functional parity with the reference C++ `indi-cele
 *   ✅ **Peripherals:** Support for Focuser, GPS, and Power/Battery telemetry.
 *   ✅ **Validation:** Dedicated hardware (HIT) and photography (PPT) testing routines.
 *   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI and tunable mount imperfections.
-*   ✅ **Testing:** 32+ automated tests covering all subsystems.
+*   ✅ **Packaging:** PyPI-ready structure with `src` layout and `pyproject.toml`.
+*   ✅ **Testing:** 37+ automated tests covering all subsystems.
+
+---
+
+## Development Roadmap
+
+### Phase 13: Internal Server & Release Polish (In Progress)
+*   Integration of `indipyserver` for standalone network operation.
+*   Finalizing documentation and PyPI distribution metadata.
+
+### Phase 14: Advanced Features (Planned)
+*   Periodic Error Correction (PEC).
+*   Hibernation mode.
 *   ✅ **Packaging:** PyPI-ready structure with `src` layout and `pyproject.toml`.
 
 ---

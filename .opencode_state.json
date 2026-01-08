@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 12 - Advanced Features & Maintenance
+- **Current Phase**: Phase 13 - Internal Server & Release Polish
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -27,22 +27,16 @@
 - **Phase 11**: Advanced Calibration
 - **Validation**: Hardware (HIT) and Photography (PPT) testing routines.
 - **Robustness**: Stabilized tests against external TUI simulators.
-- **Phase 12**: Functional Parity (Part 1)
-  - Implemented Dynamic Mount Detection.
-  - Implemented RTC and Site management (Read/Write).
-  - Standardized properties and slew rates.
-  - Added Power/Battery telemetry.
-  - Added extended GPS satellite status.
-- **Configuration**: Centralized all settings in `config.yaml` and supported CLI/Env overrides.
+- **Phase 12**: Functional Parity
+- **Packaging**: Refactored to `src` layout, `pyproject.toml` and CLI entry points.
+- **Configuration**: Centralized all settings in `config.yaml`.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 12**: Advanced Features & Parity
-  - Planning PEC (Periodic Error Correction).
-  - Planning Hibernation mode.
+- **Phase 13**: Internal Server & Release Polish
+  - Integration of `indipyserver`.
 
 ### Pending Tasks 📋
-1. Implement Periodic Error Correction (PEC)
-2. Implement Hibernation mode
-3. Backlight control
-4. WiFi status (RSSI)
+1. Implement internal INDI server mode.
+2. Implement Periodic Error Correction (PEC)
+3. Implement Hibernation mode
