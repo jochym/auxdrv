@@ -155,9 +155,9 @@ INDEX_HTML = """
     <title>Celestron AUX 3D Console</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
-        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 200px; font-size: 0.5vw; }
-        #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 90vh; height: 90vh; border-radius: 50%; overflow: hidden; }
-        #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 0.8vw; }
+        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 20vw; min-width: 250px; font-size: 0.75vw; }
+        #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 45vh; height: 45vh; border-radius: 50%; overflow: hidden; }
+        #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 1vw; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
         .cyan { color: #7dcfff; }
@@ -165,15 +165,15 @@ INDEX_HTML = """
         .blue { color: #7aa2f7; }
         .yellow { color: #e0af68; }
         .magenta { color: #bb9af7; }
-        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 0.3vh; }
-        .sky-label { position: absolute; bottom: 2vh; width: 100%; text-align: center; font-size: 1.5vh; color: #565f89; pointer-events: none; }
+        .telemetry-row { display: flex; justify-content: space-between; margin-bottom: 0.5vh; }
+        .sky-label { position: absolute; bottom: 1vh; width: 100%; text-align: center; font-size: 1.2vh; color: #565f89; pointer-events: none; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
     <div id="info">
-        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px; font-size: 0.7vw;">AUX Digital Twin</h2>
+        <h2 style="margin-top:0; border-bottom: 1px solid #414868; padding-bottom: 5px; font-size: 1.0vw;">AUX Digital Twin</h2>
         <div id="telemetry">
             <div class="telemetry-row"><span>AZM:</span> <span id="azm" class="cyan">0.00</span>° (<span id="v_azm" class="blue">0.0</span>°/s)</div>
             <div class="telemetry-row"><span>ALT:</span> <span id="alt" class="cyan">0.00</span>° (<span id="v_alt" class="blue">0.0</span>°/s)</div>
@@ -246,19 +246,17 @@ INDEX_HTML = """
         for (let i = 0; i < 360; i += 10) {
             const isMajor = i % 30 === 0;
             const length = isMajor ? 0.08 : 0.04;
+            const rad = THREE.MathUtils.degToRad(i);
             const tickGeom = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0.45),
-                new THREE.Vector3(0, 0, 0.45 + length)
+                new THREE.Vector3(Math.sin(rad) * 0.45, 0, Math.cos(rad) * 0.45),
+                new THREE.Vector3(Math.sin(rad) * (0.45 + length), 0, Math.cos(rad) * (0.45 + length))
             ]);
             const tick = new THREE.Line(tickGeom, scaleMaterial);
-            // Azimuth 0 is North (Z+)
-            tick.rotation.y = THREE.MathUtils.degToRad(-i);
             azScale.add(tick);
             
             if (isMajor) {
                 const label = createLabel(i.toString(), '#565f89');
-                const angle = THREE.MathUtils.degToRad(-i);
-                label.position.set(Math.sin(angle) * 0.6, 0, Math.cos(angle) * 0.6);
+                label.position.set(Math.sin(rad) * 0.6, 0, Math.cos(rad) * 0.6);
                 azScale.add(label);
             }
         }
@@ -271,7 +269,7 @@ INDEX_HTML = """
         scene.add(azmGroup);
 
         // Azimuth Indicator Dot (Points along viewing direction - Z+)
-        const azDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
+        const azDot = new THREE.Mesh(new THREE.SphereGeometry(0.025), indicatorMaterial);
         azDot.position.set(0, 0.02, 0.45);
         azmGroup.add(azDot);
 
@@ -292,7 +290,7 @@ INDEX_HTML = """
         pivot.position.set(geo.fork_width/2, geo.fork_height * 0.8, 0);
         azmGroup.add(pivot);
 
-        // Altitude Scale (Stationary relative to Fork)
+        // Altitude Scale (Vertical radial lines stationary on the fork)
         const altScale = new THREE.Group();
         const altRadius = 0.3;
         for (let i = -20; i <= 90; i += 10) {
@@ -320,8 +318,8 @@ INDEX_HTML = """
         altGroup.position.set(0, geo.fork_height * 0.8, 0);
         azmGroup.add(altGroup);
 
-        // Altitude Indicator Dot
-        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
+        // Altitude Indicator Dot (Moves with OTA)
+        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.025), indicatorMaterial);
         altDot.position.set(geo.fork_width + geo.arm_thickness/2 + 0.02, 0, altRadius);
         altGroup.add(altDot);
 
@@ -402,7 +400,10 @@ INDEX_HTML = """
             document.getElementById('pwr').innerText = data.voltage.toFixed(1) + 'V (' + data.current.toFixed(1) + 'A)';
             document.getElementById('status').innerText = data.slewing ? 'SLEWING' : (data.guiding ? 'TRACKING' : 'IDLE');
 
+            // Apply rotations
+            // Azimuth: Telescope Azm 0 is North (Z+). 
             azmGroup.rotation.y = -THREE.MathUtils.degToRad(data.azm);
+            // Altitude: 0 is Horizontal (Z+), 90 is Zenith (Y+).
             altGroup.rotation.x = -THREE.MathUtils.degToRad(data.alt);
 
             const worldPos = new THREE.Vector3();
