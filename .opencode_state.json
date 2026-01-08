@@ -3,7 +3,7 @@
 ## Current Session Info
 - **Session ID**: ses_47104f7d2ffe9GNkYTWiH5nAAf
 - **Last Updated**: 2026-01-07
-- **Current Phase**: Phase 12 - Peripheral Support & Plug & Play
+- **Current Phase**: Phase 12 - Advanced Features & Maintenance
 
 ## Global Rules
 - **Language**: ALL documentation, comments, strings, and repository texts MUST be in English, regardless of the conversation language.
@@ -27,16 +27,21 @@
 - **Phase 11**: Advanced Calibration
 - **Validation**: Hardware (HIT) and Photography (PPT) testing routines.
 - **Robustness**: Stabilized tests against external TUI simulators.
+- **Phase 12**: Functional Parity (Part 1)
+  - Implemented Dynamic Mount Detection.
+  - Implemented RTC and Site management (Read/Write).
+  - Standardized properties and slew rates.
+  - Added Power/Battery telemetry.
+  - Added extended GPS satellite status.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄
-- **Phase 12**: Peripheral Support & Plug & Play
-  - Property tree audit and unification with `indi_celestron_gps`.
-  - Dynamic mount type detection (`MC_GET_MODEL`).
-  - RTC management.
+- **Phase 12**: Advanced Features & Parity
+  - Planning PEC (Periodic Error Correction).
+  - Planning Hibernation mode.
 
 ### Pending Tasks 📋
-1. Implement Dynamic Model and Mount Type Detection
-2. Implement RTC management (Read/Write)
-3. Power/Voltage reporting
-4. Extended GPS module status
+1. Implement Periodic Error Correction (PEC)
+2. Implement Hibernation mode
+3. Backlight control
+4. WiFi status (RSSI)

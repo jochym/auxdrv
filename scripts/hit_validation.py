@@ -3,6 +3,7 @@ import sys
 import os
 import termios
 import tty
+import argparse
 from datetime import datetime
 
 # Simple INDI XML templates
@@ -30,8 +31,9 @@ class HITValidation:
             self.reader, self.writer = await asyncio.open_connection(
                 self.host, self.port
             )
-            self.writer.write(GET_PROPS.encode())
-            await self.writer.drain()
+            if self.writer:
+                self.writer.write(GET_PROPS.encode())
+                await self.writer.drain()
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
@@ -87,17 +89,6 @@ class HITValidation:
         await self.send_prop("TELESCOPE_ABORT_MOTION", {"ABORT": "On"})
         self.abort_event.set()
 
-    async def get_key(self):
-        """Reads a single key from stdin."""
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        try:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1)
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        return ch
-
     async def monitor_abort(self):
         """Background task to watch for Space key."""
         while not self.abort_event.is_set():
@@ -114,19 +105,26 @@ class HITValidation:
         print("Press [Enter] to proceed, [Space] to ABORT and EXIT.")
 
         while True:
-            fd = sys.stdin.fileno()
-            old_settings = termios.tcgetattr(fd)
-            try:
-                tty.setraw(sys.stdin.fileno())
-                ch = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            # Note: sys.stdin.read(1) might be tricky in raw mode within asyncio loop
+            # But for a validation script it's acceptable if the loop is otherwise waiting
+            loop = asyncio.get_event_loop()
+            ch = await loop.run_in_executor(None, self._get_char_raw)
 
             if ch in ("\r", "\n"):
                 return True
             if ch == " ":
                 await self.abort()
                 return False
+
+    def _get_char_raw(self):
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(sys.stdin.fileno())
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        return ch
 
     async def run_test(self):
         if not await self.connect():
@@ -135,7 +133,7 @@ class HITValidation:
         print("\n--- Hardware Interaction Test (HIT) ---")
         print("Safety: Press SPACE at any time to STOP all motion.")
 
-        asyncio.create_task(self.monitor_abort())
+        abort_task = asyncio.create_task(self.monitor_abort())
 
         try:
             # 1. Initialization
@@ -150,11 +148,11 @@ class HITValidation:
             print("\nPhase 2: Directional Pulse (North)")
             await self.send_prop("SLEW_RATE", {"RATE": 2})
             await self.send_prop(
-                "TELESCOPE_MOTION_NS", {"MOTION_N": "On", "MOTION_S": "Off"}
+                "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "On", "SLEW_SOUTH": "Off"}
             )
             await asyncio.sleep(2)
             await self.send_prop(
-                "TELESCOPE_MOTION_NS", {"MOTION_N": "Off", "MOTION_S": "Off"}
+                "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "Off", "SLEW_SOUTH": "Off"}
             )
             if not await self.confirm("Did the mount move NORTH?"):
                 return
@@ -162,11 +160,11 @@ class HITValidation:
             # 3. Pulse Test S
             print("\nPhase 3: Directional Pulse (South)")
             await self.send_prop(
-                "TELESCOPE_MOTION_NS", {"MOTION_N": "Off", "MOTION_S": "On"}
+                "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "Off", "SLEW_SOUTH": "On"}
             )
             await asyncio.sleep(2)
             await self.send_prop(
-                "TELESCOPE_MOTION_NS", {"MOTION_N": "Off", "MOTION_S": "Off"}
+                "TELESCOPE_MOTION_NS", {"SLEW_NORTH": "Off", "SLEW_SOUTH": "Off"}
             )
             if not await self.confirm("Did the mount move SOUTH?"):
                 return
@@ -177,11 +175,11 @@ class HITValidation:
                 return
             await self.send_prop("SLEW_RATE", {"RATE": 9})
             await self.send_prop(
-                "TELESCOPE_MOTION_WE", {"MOTION_W": "Off", "MOTION_E": "On"}
+                "TELESCOPE_MOTION_WE", {"SLEW_WEST": "Off", "SLEW_EAST": "On"}
             )
             await asyncio.sleep(1)
             await self.send_prop(
-                "TELESCOPE_MOTION_WE", {"MOTION_W": "Off", "MOTION_E": "Off"}
+                "TELESCOPE_MOTION_WE", {"SLEW_WEST": "Off", "SLEW_EAST": "Off"}
             )
             if not await self.confirm("Was that Rate 9 movement?"):
                 return
@@ -202,13 +200,19 @@ class HITValidation:
             print(f"\nTest Error: {e}")
             await self.abort()
         finally:
+            abort_task.cancel()
             if self.writer:
                 self.writer.close()
                 await self.writer.wait_closed()
 
 
 if __name__ == "__main__":
-    hit = HITValidation()
+    parser = argparse.ArgumentParser(description="HIT Validation Script")
+    parser.add_argument("--host", default="localhost", help="INDI server host")
+    parser.add_argument("--port", type=int, default=7624, help="INDI server port")
+    args = parser.parse_args()
+
+    hit = HITValidation(host=args.host, port=args.port)
     try:
         asyncio.run(hit.run_test())
     except KeyboardInterrupt:

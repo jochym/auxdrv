@@ -261,8 +261,21 @@ class NexStarScope:
         self._gps_handlers = {
             0x01: self.get_gps_lat,
             0x02: self.get_gps_long,
+            0x31: self.set_gps_lat,
+            0x32: self.set_gps_long,
+            0x33: self.get_gps_time,
+            0x34: self.set_gps_time,
             0x36: self.get_gps_time_valid,
             0x37: self.get_gps_linked,
+            0x38: self.get_gps_sats,
+            0x3B: self.get_gps_date,
+            0x3C: self.set_gps_date,
+            0xFE: self.fw_version,
+        }
+        self._power_handlers = {
+            0x01: self.get_pwr_voltage,
+            0x02: self.get_pwr_current,
+            0x03: self.get_pwr_status,
             0xFE: self.fw_version,
         }
         if tui:
@@ -521,6 +534,16 @@ class NexStarScope:
         """Returns simulated GPS longitude."""
         return bytes(self.gps_lon)
 
+    def set_gps_lat(self, data, snd, rcv):
+        """Sets simulated GPS latitude."""
+        self.gps_lat = list(data)
+        return b""
+
+    def set_gps_long(self, data, snd, rcv):
+        """Sets simulated GPS longitude."""
+        self.gps_lon = list(data)
+        return b""
+
     def get_gps_time_valid(self, data, snd, rcv):
         """Checks if GPS time is valid."""
         return b"\x01"
@@ -528,6 +551,50 @@ class NexStarScope:
     def get_gps_linked(self, data, snd, rcv):
         """Checks if GPS is linked."""
         return b"\x01" if self.gps_linked else b"\x00"
+
+    def get_gps_sats(self, data, snd, rcv):
+        """Returns simulated GPS satellite count."""
+        return b"\x0c"  # 12 satellites
+
+    def get_gps_time(self, data, snd, rcv):
+        """Returns simulated GPS time [HH, MM, SS]."""
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        return bytes([now.hour, now.minute, now.second])
+
+    def set_gps_time(self, data, snd, rcv):
+        """Sets simulated GPS time."""
+        # For simulation, we just acknowledge
+        return b""
+
+    def get_gps_date(self, data, snd, rcv):
+        """Returns simulated GPS date [MM, DD, YY]."""
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        return bytes([now.month, now.day, now.year % 100])
+
+    def set_gps_date(self, data, snd, rcv):
+        """Sets simulated GPS date."""
+        return b""
+
+    def get_pwr_voltage(self, data, snd, rcv):
+        """Returns simulated battery voltage in millivolts."""
+        # self.bat_voltage is already in microvolts in existing code
+        return pack_int3(self.bat_voltage / 1000.0)
+
+    def get_pwr_current(self, data, snd, rcv):
+        """Returns simulated current in milliamps."""
+        # Simulate some current consumption
+        current = 200  # mA idle
+        if self.slewing:
+            current += 1000  # mA slewing
+        return pack_int3(current)
+
+    def get_pwr_status(self, data, snd, rcv):
+        """Returns power status (0=Discharging, 1=Charging)."""
+        return b"\x01" if self.charge else b"\x00"
 
     def get_approach(self, data, snd, rcv):
         return bytes((self.alt_approach if rcv == 0x11 else self.azm_approach,))
@@ -708,6 +775,8 @@ class NexStarScope:
                     handlers = self._focuser_handlers
                 elif t == 0xB0:
                     handlers = self._gps_handlers
+                elif t in (0xB6, 0xB7):
+                    handlers = self._power_handlers
                 else:
                     handlers = self._other_handlers
 

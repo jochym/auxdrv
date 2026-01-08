@@ -1,19 +1,22 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v1.1.1)
+## Current Project Status (v1.2.0)
 
-The project has achieved its core architectural goals and features a robust hardware validation suite. Tests are now fully stable against both internal and external (TUI) simulators.
+The driver has achieved high functional parity with the official `indi_celestron_gps`, featuring dynamic mount detection, RTC management, and peripheral telemetry (battery/power).
 
 ### Implemented Milestones:
 *   ✅ **AUX Core:** Complete support for the Celestron binary protocol (checksums, echo skipping).
 *   ✅ **Connectivity:** Support for Serial and TCP (simulator).
 *   ✅ **INDI API:** Full compatibility with `indipydriver 3.0.4`.
+*   ✅ **Plug & Play:** Dynamic mount model and type detection (`MC_GET_MODEL`).
+*   ✅ **Time/Site:** Support for reading/writing RTC and Location data to the hardware.
 *   ✅ **Astronomy:** RA/Dec <-> Encoder transformations, 2nd order prediction, anti-backlash GoTo.
 *   ✅ **Alignment:** Advanced **6-Parameter Geometric solver** with **Residual-Aware Grid Thinning**.
 *   ✅ **Refraction:** Switchable atmospheric refraction correction in the driver.
+*   ✅ **Peripherals:** Support for Focuser, GPS (sats info), and Power/Battery telemetry.
 *   ✅ **Validation:** Dedicated hardware (HIT) and photography (PPT) testing routines.
 *   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI and tunable mount imperfections.
-*   ✅ **Testing:** 30+ automated tests covering all subsystems.
+*   ✅ **Testing:** 31+ automated tests covering all subsystems.
 *   ✅ **Documentation:** Complete English documentation for driver, alignment, and validation.
 
 ---

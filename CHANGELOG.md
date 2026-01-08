@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-01-07
+
+### Added
+- **Dynamic Mount Detection**: Implemented a capabilities matrix mapping Model IDs to mount types (Alt-Az, GEM) and features.
+- **RTC Management**: Support for reading and writing Real-Time Clock data to the mount (`GPS_SET_TIME`, `GPS_SET_DATE`).
+- **Site Management**: Implemented writing Latitude/Longitude back to the mount hardware.
+- **Power Management**: New `AUX_POWER` property for reporting supply voltage and current consumption (Evolution battery module).
+- **Extended GPS Status**: Added satellite count reporting.
+- **Simulator Upgrades**: Added support for RTC, Location setting, and Battery telemetry commands.
+
+### Changed
+- **Property Standardization**: Renamed motion switches to standard `SLEW_NORTH/SOUTH/WEST/EAST`.
+- **Slew Rate Compliance**: Added standard `TELESCOPE_SLEW_RATE` switch vector (Guide, Centering, Find, Max) mapped to the native 1-9 scale.
+- Updated `scripts/hit_validation.py` to match the new property names.
+
 ## [1.1.1] - 2026-01-07
 
 ### Fixed

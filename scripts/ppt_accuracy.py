@@ -4,6 +4,8 @@ import os
 import subprocess
 import time
 import math
+import argparse
+import re
 from datetime import datetime
 
 
@@ -34,16 +36,18 @@ class PPTAccuracy:
             self.reader, self.writer = await asyncio.open_connection(
                 self.host, self.port
             )
-            self.writer.write(b'<getProperties version="1.7" />\n')
-            await self.writer.drain()
+            if self.writer:
+                self.writer.write(b'<getProperties version="1.7" />\n')
+                await self.writer.drain()
             return True
         except Exception as e:
             print(f"Connection failed: {e}")
             return False
 
     async def send_xml(self, xml):
-        self.writer.write(xml.encode())
-        await self.writer.drain()
+        if self.writer:
+            self.writer.write(xml.encode())
+            await self.writer.drain()
 
     async def slew_to(self, ra, dec):
         print(f"Slewing to RA {ra:.2f}, Dec {dec:.2f}...")
@@ -57,7 +61,6 @@ class PPTAccuracy:
 
     async def capture_image(self, exposure=2.0):
         print(f"Capturing {exposure}s exposure...")
-        filename = f"ppt_capture_{int(time.time())}.fits"
         # 1. Set local path
         xml_path = f'''<newTextVector device="{self.camera_device}" name="UPLOAD_SETTINGS">
             <oneText name="UPLOAD_DIR">{os.getcwd()}</oneText>
@@ -88,18 +91,12 @@ class PPTAccuracy:
     def solve_image(self, filepath):
         print(f"Solving {filepath} with ASTAP...")
         try:
-            # -solve: standard solve, -v: verbose
+            # -solve: standard solve
             res = subprocess.run(
                 ["astap", "-f", filepath, "-solve"], capture_output=True, text=True
             )
-            # ASTAP creates a .wcs file or outputs to stdout
-            # For simplicity in this routine, we look for the .wcs or parse stdout
-            # Real ASTAP output: "Solution found: RA=..., Dec=..."
+            # ASTAP output: "Solution found: RA=..., Dec=..."
             if "Solution found" in res.stdout:
-                # Extract RA/Dec from stdout
-                # Solution found: 10:20:30, 45:00:00
-                import re
-
                 match = re.search(r"Solution found: ([\d:]+), ([\d\-:]+)", res.stdout)
                 if match:
                     ra_str, dec_str = match.groups()
@@ -139,7 +136,9 @@ class PPTAccuracy:
                 continue
 
             s_ra, s_dec = self.solve_image(filepath)
-            if s_ra is not None:
+            if s_ra is not None and s_dec is not None:
+                # Coordinate distance calculation
+                # Error in degrees = sqrt((deltaRA*cosDec)^2 + deltaDec^2)
                 error = (
                     math.sqrt(
                         ((ra - s_ra) * 15 * math.cos(math.radians(dec))) ** 2
@@ -161,9 +160,25 @@ class PPTAccuracy:
         else:
             print("No valid results.")
 
+        if self.writer:
+            self.writer.close()
+            await self.writer.wait_closed()
+
 
 if __name__ == "__main__":
-    ppt = PPTAccuracy()
+    parser = argparse.ArgumentParser(description="PPT Accuracy Script")
+    parser.add_argument("--host", default="localhost", help="INDI server host")
+    parser.add_argument("--port", type=int, default=7624, help="INDI server port")
+    parser.add_argument("--mount", default="Celestron AUX", help="Mount device name")
+    parser.add_argument("--camera", default="CCD Simulator", help="Camera device name")
+    args = parser.parse_args()
+
+    ppt = PPTAccuracy(
+        host=args.host,
+        port=args.port,
+        mount_device=args.mount,
+        camera_device=args.camera,
+    )
     try:
         asyncio.run(ppt.run_ppt())
     except KeyboardInterrupt:

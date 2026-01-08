@@ -90,6 +90,28 @@ def remove_refraction(alt_deg):
     return true_h
 
 
+MOUNT_CAPABILITIES = {
+    0x0001: {"name": "Nexstar GPS", "type": "Alt-Az", "has_rtc": True},
+    0x0783: {"name": "Nexstar SLT", "type": "Alt-Az", "has_rtc": False},
+    0x0B83: {"name": "4/5SE", "type": "Alt-Az", "has_rtc": False},
+    0x0C82: {"name": "6/8SE", "type": "Alt-Az", "has_rtc": False},
+    0x0984: {"name": "Advanced GT", "type": "GEM", "has_rtc": False},
+    0x0A84: {"name": "CGE", "type": "GEM", "has_rtc": True},
+    0x0E85: {"name": "CGEM", "type": "GEM", "has_rtc": True},
+    0x1189: {"name": "CPC Deluxe", "type": "Alt-Az", "has_rtc": True},
+    0x1283: {"name": "GT Series", "type": "Alt-Az", "has_rtc": False},
+    0x1485: {"name": "AVX", "type": "GEM", "has_rtc": True},
+    0x1687: {
+        "name": "Evolution",
+        "type": "Alt-Az",
+        "has_rtc": True,
+        "has_battery": True,
+    },
+    0x1788: {"name": "CGX", "type": "GEM", "has_rtc": True},
+    0x1888: {"name": "CGX-L", "type": "GEM", "has_rtc": True},
+}
+
+
 class CelestronAUXDriver(IPyDriver):
     """
     INDI Driver for Celestron mounts.
@@ -113,6 +135,7 @@ class CelestronAUXDriver(IPyDriver):
                 self.mount_position_vector,
                 self.mount_status_vector,
                 self.slew_rate_vector,
+                self.std_slew_rate_vector,
                 self.motion_ns_vector,
                 self.motion_we_vector,
                 self.absolute_coord_vector,
@@ -134,6 +157,7 @@ class CelestronAUXDriver(IPyDriver):
                 self.cordwrap_pos_vector,
                 self.focuser_vector,
                 self.gps_status_vector,
+                self.gps_sat_vector,
                 self.gps_refresh_vector,
                 self.target_type_vector,
                 self.planet_select_vector,
@@ -141,6 +165,7 @@ class CelestronAUXDriver(IPyDriver):
                 self.refraction_vector,
                 self.calibration_params_vector,
                 self.abort_motion_vector,
+                self.aux_power_vector,
             ],
         )
 
@@ -234,8 +259,22 @@ class CelestronAUXDriver(IPyDriver):
             "SLEW_RATE", "Slew Rate", "Main", "rw", "Idle", [self.slew_rate]
         )
 
-        self.motion_n = SwitchMember("MOTION_N", "North", "Off")
-        self.motion_s = SwitchMember("MOTION_S", "South", "Off")
+        self.slew_guide = SwitchMember("SLEW_GUIDE", "Guide", "Off")
+        self.slew_centering = SwitchMember("SLEW_CENTERING", "Centering", "On")
+        self.slew_find = SwitchMember("SLEW_FIND", "Find", "Off")
+        self.slew_max = SwitchMember("SLEW_MAX", "Max", "Off")
+        self.std_slew_rate_vector = SwitchVector(
+            "TELESCOPE_SLEW_RATE",
+            "Slew Rate",
+            "Main",
+            "rw",
+            "OneOfMany",
+            "Idle",
+            [self.slew_guide, self.slew_centering, self.slew_find, self.slew_max],
+        )
+
+        self.motion_n = SwitchMember("SLEW_NORTH", "North", "Off")
+        self.motion_s = SwitchMember("SLEW_SOUTH", "South", "Off")
         self.motion_ns_vector = SwitchVector(
             "TELESCOPE_MOTION_NS",
             "Motion N/S",
@@ -246,8 +285,8 @@ class CelestronAUXDriver(IPyDriver):
             [self.motion_n, self.motion_s],
         )
 
-        self.motion_w = SwitchMember("MOTION_W", "West", "Off")
-        self.motion_e = SwitchMember("MOTION_E", "East", "Off")
+        self.motion_w = SwitchMember("SLEW_WEST", "West", "Off")
+        self.motion_e = SwitchMember("SLEW_EAST", "East", "Off")
         self.motion_we_vector = SwitchVector(
             "TELESCOPE_MOTION_WE",
             "Motion W/E",
@@ -546,8 +585,14 @@ class CelestronAUXDriver(IPyDriver):
 
         # GPS Support
         self.gps_status = LightMember("GPS_STATUS", "GPS Status", "Idle")
+        self.gps_sats = NumberMember(
+            "GPS_SATS", "Satellites", "%d", "0", "24", "0", "0"
+        )
         self.gps_status_vector = LightVector(
             "GPS_STATUS", "GPS Status", "Accessories", "Idle", [self.gps_status]
+        )
+        self.gps_sat_vector = NumberVector(
+            "GPS_SATS", "GPS Satellites", "Accessories", "ro", "Idle", [self.gps_sats]
         )
 
         self.gps_refresh = SwitchMember("REFRESH", "Refresh GPS", "Off")
@@ -642,6 +687,22 @@ class CelestronAUXDriver(IPyDriver):
             [self.abort_motion],
         )
 
+        # Power Status
+        self.voltage = NumberMember(
+            "VOLTAGE", "Voltage (V)", "%.2f", "0", "20", "0", "0"
+        )
+        self.current = NumberMember(
+            "CURRENT", "Current (A)", "%.3f", "-5", "5", "0", "0"
+        )
+        self.aux_power_vector = NumberVector(
+            "AUX_POWER",
+            "Aux Power",
+            "Accessories",
+            "ro",
+            "Idle",
+            [self.voltage, self.current],
+        )
+
         # Refraction Correction
         self.refraction_on = SwitchMember("ENABLED", "Enabled", "Off")
         self.refraction_off = SwitchMember("DISABLED", "Disabled", "On")
@@ -700,6 +761,8 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "BAUD":
             self.baud_vector.update(event.root)
             await self.baud_vector.send_setVector(state="Ok")
+        elif event.vectorname == "TELESCOPE_SLEW_RATE":
+            await self.handle_std_slew_rate(event)
         elif event.vectorname == "SLEW_RATE":
             self.slew_rate_vector.update(event.root)
             await self.slew_rate_vector.send_setVector(state="Ok")
@@ -718,6 +781,7 @@ class CelestronAUXDriver(IPyDriver):
         elif event.vectorname == "GEOGRAPHIC_COORD":
             self.location_vector.update(event.root)
             self.update_observer()
+            await self.write_location_to_mount()
             await self.location_vector.send_setVector(state="Ok")
         elif event.vectorname == "EQUATORIAL_EOD_COORD":
             await self.handle_equatorial_goto(event)
@@ -761,6 +825,41 @@ class CelestronAUXDriver(IPyDriver):
             await self.refraction_vector.send_setVector(state="Ok")
         elif event.vectorname == "TELESCOPE_ABORT_MOTION":
             await self.handle_abort_motion(event)
+
+    async def write_location_to_mount(self):
+        """Writes current Latitude/Longitude to the mount's GPS/RTC."""
+        if not self.communicator or not self.communicator.connected:
+            return False
+
+        lat = float(self.lat.membervalue)
+        lon = float(self.long.membervalue)
+
+        def float_to_aux_pos(val, is_lat=True):
+            # Format: [deg, min, sec, sign (0=N/E, 1=S/W)]
+            sign = 0 if val >= 0 else 1
+            abs_val = abs(val)
+            d = int(abs_val)
+            m = int((abs_val - d) * 60)
+            s = int(((abs_val - d) * 60 - m) * 60)
+            return bytes([d, m, s, sign])
+
+        s1 = await self.communicator.send_command(
+            AUXCommand(
+                AUXCommands.GPS_SET_LAT,
+                AUXTargets.APP,
+                AUXTargets.GPS,
+                float_to_aux_pos(lat, True),
+            )
+        )
+        s2 = await self.communicator.send_command(
+            AUXCommand(
+                AUXCommands.GPS_SET_LONG,
+                AUXTargets.APP,
+                AUXTargets.GPS,
+                float_to_aux_pos(lon, False),
+            )
+        )
+        return s1 and s2
 
     async def handle_limits(self, event):
         """Updates internal slew limits."""
@@ -869,6 +968,14 @@ class CelestronAUXDriver(IPyDriver):
         self.gps_status.membervalue = "Ok"
         await self.gps_status_vector.send_setVector()
 
+        # Get Sats
+        resp_sats = await self.communicator.send_command(
+            AUXCommand(AUXCommands.GPS_GET_SATS, AUXTargets.APP, AUXTargets.GPS)
+        )
+        if resp_sats:
+            self.gps_sats.membervalue = resp_sats.data[0]
+            await self.gps_sat_vector.send_setVector()
+
         # Get Lat/Long
         r_lat = await self.communicator.send_command(
             AUXCommand(AUXCommands.GPS_GET_LAT, AUXTargets.APP, AUXTargets.GPS)
@@ -907,6 +1014,7 @@ class CelestronAUXDriver(IPyDriver):
             if await self.communicator.connect():
                 await self.connection_vector.send_setVector(state="Ok")
                 await self.get_firmware_info()
+                await self.sync_time()
                 await self.read_mount_position()
             else:
                 self.conn_connect.membervalue = "Off"
@@ -916,6 +1024,25 @@ class CelestronAUXDriver(IPyDriver):
             if self.communicator:
                 await self.communicator.disconnect()
             await self.connection_vector.send_setVector(state="Idle")
+
+    async def sync_time(self):
+        """Synchronizes mount RTC with system time."""
+        if not self.communicator or not self.communicator.connected:
+            return False
+
+        now = datetime.now(timezone.utc)
+        # Time: [HH, MM, SS]
+        t_data = bytes([now.hour, now.minute, now.second])
+        # Date: [MM, DD, YY]
+        d_data = bytes([now.month, now.day, now.year % 100])
+
+        s1 = await self.communicator.send_command(
+            AUXCommand(AUXCommands.GPS_SET_TIME, AUXTargets.APP, AUXTargets.GPS, t_data)
+        )
+        s2 = await self.communicator.send_command(
+            AUXCommand(AUXCommands.GPS_SET_DATE, AUXTargets.APP, AUXTargets.GPS, d_data)
+        )
+        return s1 and s2
 
     async def get_firmware_info(self):
         """Retrieves model and version info from the mount."""
@@ -928,20 +1055,18 @@ class CelestronAUXDriver(IPyDriver):
         )
         if resp:
             model_id = resp.get_data_as_int()
-            model_map = {
-                0x0001: "Nexstar GPS",
-                0x0783: "Nexstar SLT",
-                0x0B83: "4/5SE",
-                0x0C82: "6/8SE",
-                0x1189: "CPC Deluxe",
-                0x1283: "GT Series",
-                0x1485: "AVX",
-                0x1687: "Evolution",
-                0x1788: "CGX",
-            }
-            self.model.membervalue = model_map.get(
-                model_id, f"Unknown (0x{model_id:04X})"
+            cap = MOUNT_CAPABILITIES.get(
+                model_id, {"name": f"Unknown (0x{model_id:04X})", "type": "Unknown"}
             )
+            self.model.membervalue = cap["name"]
+
+            # Auto-configure mount type
+            m_type = cap["type"]
+            if m_type == "GEM":
+                self.target_type_vector.label = "GEM Mount"
+                # For GEM, we might want to hide Cord Wrap and show Polar properties later
+            elif m_type == "Alt-Az":
+                self.target_type_vector.label = "Alt-Az Mount"
 
         # Get Versions
         for target, member in [
@@ -989,6 +1114,21 @@ class CelestronAUXDriver(IPyDriver):
         self.ra.membervalue = ra_val
         self.dec.membervalue = dec_val
         await self.equatorial_vector.send_setVector(state="Ok")
+
+    async def handle_std_slew_rate(self, event):
+        """Maps standard INDI slew rates to 1-9 scale."""
+        self.std_slew_rate_vector.update(event.root)
+        if self.slew_guide.membervalue == "On":
+            self.slew_rate.membervalue = 1
+        elif self.slew_centering.membervalue == "On":
+            self.slew_rate.membervalue = 3
+        elif self.slew_find.membervalue == "On":
+            self.slew_rate.membervalue = 6
+        elif self.slew_max.membervalue == "On":
+            self.slew_rate.membervalue = 9
+
+        await self.std_slew_rate_vector.send_setVector(state="Ok")
+        await self.slew_rate_vector.send_setVector()
 
     async def handle_motion_ns(self, event):
         """Handles manual North/South slew commands."""
@@ -1535,6 +1675,32 @@ class CelestronAUXDriver(IPyDriver):
 
             # Update alignment stats periodically
             await self.update_alignment_status()
+
+            # Poll Power
+            await self.update_power_info()
+
+    async def update_power_info(self):
+        """Polls battery module for voltage and current."""
+        if not self.communicator or not self.communicator.connected:
+            return
+
+        # Voltage
+        resp = await self.communicator.send_command(
+            AUXCommand(AUXCommands.PWR_GET_VOLTAGE, AUXTargets.APP, AUXTargets.BAT)
+        )
+        if resp:
+            # Reports in millivolts
+            self.voltage.membervalue = resp.get_data_as_int() / 1000.0
+
+        # Current
+        resp = await self.communicator.send_command(
+            AUXCommand(AUXCommands.PWR_GET_CURRENT, AUXTargets.APP, AUXTargets.BAT)
+        )
+        if resp:
+            # Reports in milliamps
+            self.current.membervalue = resp.get_data_as_int() / 1000.0
+
+        await self.aux_power_vector.send_setVector()
 
 
 if __name__ == "__main__":
