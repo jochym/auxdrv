@@ -143,6 +143,7 @@ class CelestronAUXDriver(IPyDriver):
                 self.sync_vector,
                 self.park_vector,
                 self.unpark_vector,
+                self.home_vector,
                 self.location_vector,
                 self.equatorial_vector,
                 self.approach_mode_vector,
@@ -360,6 +361,20 @@ class CelestronAUXDriver(IPyDriver):
             "AtMostOne",
             "Idle",
             [self.unpark_switch],
+        )
+
+        # Homing
+        self.home_azm = SwitchMember("AZM", "AZ/RA", "Off")
+        self.home_alt = SwitchMember("ALT", "AL/DE", "Off")
+        self.home_all = SwitchMember("ALL", "All", "Off")
+        self.home_vector = SwitchVector(
+            "HOME",
+            "Home Mount",
+            "Main",
+            "rw",
+            "AtMostOne",
+            "Idle",
+            [self.home_azm, self.home_alt, self.home_all],
         )
 
         # Geographical location
@@ -776,6 +791,8 @@ class CelestronAUXDriver(IPyDriver):
             await self.handle_park(event)
         elif event.vectorname == "TELESCOPE_UNPARK":
             await self.handle_unpark(event)
+        elif event.vectorname == "HOME":
+            await self.handle_home(event)
         elif event.vectorname == "TELESCOPE_GUIDE_RATE":
             await self.handle_guide_rate(event)
         elif event.vectorname == "GEOGRAPHIC_COORD":
@@ -1353,6 +1370,44 @@ class CelestronAUXDriver(IPyDriver):
             await self.mount_status_vector.send_setVector()
             self.unpark_switch.membervalue = "Off"
             await self.unpark_vector.send_setVector(state="Ok")
+
+    async def handle_home(self, event):
+        """Moves the mount to the home position (index or 0,0)."""
+        if event and event.root:
+            self.home_vector.update(event.root)
+
+        await self.home_vector.send_setVector(state="Busy")
+
+        target_azm = (
+            self.home_azm.membervalue == "On" or self.home_all.membervalue == "On"
+        )
+        target_alt = (
+            self.home_alt.membervalue == "On" or self.home_all.membervalue == "On"
+        )
+
+        # In Celestron world, MC_SEEK_INDEX is often used for homing.
+        # But MC_LEVEL_START is also used for Alt-Az mounts.
+        # For now, we GoTo 0,0 as a reliable fallback for all models.
+
+        success = True
+        if target_azm:
+            success &= await self._do_slew(AUXTargets.AZM, 0, fast=True)
+        if target_alt:
+            success &= await self._do_slew(AUXTargets.ALT, 0, fast=True)
+
+        if success:
+            if target_azm:
+                await self._wait_for_slew(AUXTargets.AZM)
+            if target_alt:
+                await self._wait_for_slew(AUXTargets.ALT)
+            await self.home_vector.send_setVector(state="Ok")
+        else:
+            await self.home_vector.send_setVector(state="Alert")
+
+        self.home_azm.membervalue = "Off"
+        self.home_alt.membervalue = "Off"
+        self.home_all.membervalue = "Off"
+        await self.home_vector.send_setVector()
 
     async def handle_equatorial_goto(self, event):
         """Handles GoTo or Sync command using RA/Dec coordinates."""

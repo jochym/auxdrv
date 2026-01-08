@@ -565,6 +565,42 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
         self.driver.update_observer = original_update
 
+    async def test_11_homing(self):
+        """
+        Description:
+            Verifies the Homing sequence.
+
+        Methodology:
+            1. Moves the mount away from 0,0.
+            2. Triggers the `HOME` all command.
+            3. Verifies mount returns to 0 steps.
+
+        Expected Results:
+            - Mount steps should be near 0 after Home.
+        """
+        await self.driver.slew_to(AUXTargets.AZM, 20000)
+        await self.driver.slew_to(AUXTargets.ALT, 10000)
+        await self.wait_for_idle(30)
+
+        self.driver.home_all.membervalue = "On"
+        await self.driver.handle_home(None)
+        await self.wait_for_idle(30)
+
+        await self.driver.read_mount_position()
+        azm = int(self.driver.azm_steps.membervalue)
+        alt = int(self.driver.alt_steps.membervalue)
+
+        def diff_steps(s2, s1):
+            d = s2 - s1
+            if d > 16777216 / 2:
+                d -= 16777216
+            if d < -16777216 / 2:
+                d += 16777216
+            return d
+
+        self.assertLess(abs(diff_steps(azm, 0)), 500)
+        self.assertLess(abs(diff_steps(alt, 0)), 500)
+
 
 if __name__ == "__main__":
     unittest.main()

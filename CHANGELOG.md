@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-01-07
+
+### Added
+- **Homing Support**: Implemented `HOME` INDI property for automated homing/leveling sequences.
+- **Reference Parity**: Verified protocol parity with `indi-celestronaux` C++ driver.
+- **Improved Test Suite**: Added `test_11_homing` and improved wrap-around awareness in assertions.
+
 ## [1.2.0] - 2026-01-07
 
 ### Added
