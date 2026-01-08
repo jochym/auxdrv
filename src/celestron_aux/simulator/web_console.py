@@ -99,6 +99,8 @@ INDEX_HTML = """
         #controls { position: absolute; bottom: 10px; left: 10px; color: #565f89; font-size: 12px; }
         canvas { display: block; }
         .warning { color: #f7768e; font-weight: bold; }
+        .cyan { color: #7dcfff; }
+        .green { color: #9ece6a; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -151,24 +153,32 @@ INDEX_HTML = """
         azmGroup.position.y = geo.base_height;
         scene.add(azmGroup);
 
-        // Fork Arm
+        // Fork Arm (Vertical)
         const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, geo.fork_height, 0.2), mountMaterial);
-        arm.position.set(geo.fork_width/2, geo.fork_height/2, 0);
+        arm.position.set(geo.fork_width, geo.fork_height/2, 0);
         azmGroup.add(arm);
 
-        // Altitude Group (Rotates around Z in local space)
+        // Pivot Axis (Horizontal connector)
+        const pivot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, geo.fork_width, 16), mountMaterial);
+        pivot.rotation.z = Math.PI / 2;
+        pivot.position.set(geo.fork_width/2, geo.fork_height * 0.8, 0);
+        azmGroup.add(pivot);
+
+        // Altitude Group (Rotates around X in local space)
         const altGroup = new THREE.Group();
         altGroup.position.set(0, geo.fork_height * 0.8, 0);
         azmGroup.add(altGroup);
 
         // OTA
         const ota = new THREE.Mesh(new THREE.CylinderGeometry(geo.ota_radius, geo.ota_radius, geo.ota_length, 32), otaMaterial);
-        ota.rotation.z = Math.PI / 2;
+        // Point OTA along Z-axis at Alt=0
+        ota.rotation.x = Math.PI / 2;
         altGroup.add(ota);
 
         // Visual Back / Camera
         const cam = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, geo.camera_length), cameraMaterial);
-        cam.position.set(-geo.ota_length/2 - geo.camera_length/2, 0, 0);
+        // Position at the back of the OTA (negative Z)
+        cam.position.set(0, 0, -geo.ota_length/2 - geo.camera_length/2);
         altGroup.add(cam);
 
         camera.position.set(1.5, 1.5, 1.5);
@@ -190,11 +200,11 @@ INDEX_HTML = """
             document.getElementById('status').innerText = data.slewing ? 'SLEWING' : (data.guiding ? 'TRACKING' : 'IDLE');
 
             // Apply rotations
-            // Azimuth: Telescope Azm 0 is North. 
-            // We map Azm to Three.js rotation around Y.
+            // Azimuth: Telescope Azm 0 is North (Z+ in our model). 
             azmGroup.rotation.y = -THREE.MathUtils.degToRad(data.azm);
-            // Altitude: 0 is Horizontal, 90 is Zenith.
-            altGroup.rotation.z = THREE.MathUtils.degToRad(data.alt);
+            // Altitude: 0 is Horizontal (Z+), 90 is Zenith (Y+).
+            // This is a negative rotation around local X.
+            altGroup.rotation.x = -THREE.MathUtils.degToRad(data.alt);
 
             // Simple Collision Detection
             // Check if camera or back of OTA is too low
