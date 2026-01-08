@@ -17,6 +17,7 @@ The driver has achieved high functional parity with the reference C++ `indi-cele
 *   ✅ **Validation:** Dedicated hardware (HIT) and photography (PPT) testing routines.
 *   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI and tunable mount imperfections.
 *   ✅ **Testing:** 32+ automated tests covering all subsystems.
+*   ✅ **Packaging:** PyPI-ready structure with `src` layout and `pyproject.toml`.
 
 ---
 

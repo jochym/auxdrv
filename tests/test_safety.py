@@ -3,7 +3,7 @@ import unittest
 import os
 import subprocess
 import time
-from celestron_indi_driver import (
+from celestron_aux.celestron_indi_driver import (
     CelestronAUXDriver,
     AUXTargets,
     AUXCommand,
@@ -40,7 +40,7 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             [
                 "./venv/bin/python",
                 "-u",
-                "simulator/nse_simulator.py",
+                "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
                 "-p",
                 str(cls.sim_port),
@@ -79,8 +79,8 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
 
         # Reset position to 0,0
         if self.driver.communicator and self.driver.communicator.connected:
-            from celestron_aux_driver import pack_int3_steps
-            from celestron_indi_driver import AUXCommand, AUXCommands
+            from celestron_aux.celestron_aux_driver import pack_int3_steps
+            from celestron_aux.celestron_indi_driver import AUXCommand, AUXCommands
 
             cmd_azm = AUXCommand(
                 AUXCommands.MC_SET_POSITION,

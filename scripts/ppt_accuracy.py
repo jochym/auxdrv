@@ -180,7 +180,7 @@ class PPTAccuracy:
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    default_config_path = os.path.join(base_dir, "config.yaml")
+    default_config_path = os.path.join(base_dir, "src", "celestron_aux", "config.yaml")
 
     parser = argparse.ArgumentParser(description="PPT Accuracy Script")
     parser.add_argument(

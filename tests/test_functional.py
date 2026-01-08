@@ -6,7 +6,7 @@ import subprocess
 import time
 import math
 import ephem
-from celestron_indi_driver import (
+from celestron_aux.celestron_indi_driver import (
     CelestronAUXDriver,
     AUXTargets,
     AUXCommand,
@@ -48,7 +48,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             [
                 "./venv/bin/python",
                 "-u",
-                "simulator/nse_simulator.py",
+                "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
                 "-d",
                 "-p",
@@ -92,7 +92,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
 
         # Reset position to 0,0
         if self.driver.communicator:
-            from celestron_aux_driver import pack_int3_steps
+            from celestron_aux.celestron_aux_driver import pack_int3_steps
 
             cmd_azm = AUXCommand(
                 AUXCommands.MC_SET_POSITION,
@@ -329,7 +329,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         """
         import yaml
 
-        with open("config.yaml", "r") as f:
+        with open("src/celestron_aux/config.yaml", "r") as f:
             cfg = yaml.safe_load(f).get("observer", {})
 
         self.driver.lat.membervalue = cfg.get("latitude", 50.1822)

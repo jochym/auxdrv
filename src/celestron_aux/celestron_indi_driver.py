@@ -31,22 +31,40 @@ import numpy as np
 import argparse
 
 # Import AUX protocol implementation
-from celestron_aux_driver import (
-    AUXCommands,
-    AUXTargets,
-    AUXCommand,
-    AUXCommunicator,
-    pack_int3_steps,
-    unpack_int3_steps,
-    STEPS_PER_REVOLUTION,
-)
-from alignment import (
-    AlignmentModel,
-    vector_from_radec,
-    vector_from_altaz,
-    vector_to_radec,
-    vector_to_altaz,
-)
+try:
+    from .celestron_aux_driver import (
+        AUXCommands,
+        AUXTargets,
+        AUXCommand,
+        AUXCommunicator,
+        pack_int3_steps,
+        unpack_int3_steps,
+        STEPS_PER_REVOLUTION,
+    )
+    from .alignment import (
+        AlignmentModel,
+        vector_from_radec,
+        vector_from_altaz,
+        vector_to_radec,
+        vector_to_altaz,
+    )
+except ImportError:
+    from celestron_aux_driver import (
+        AUXCommands,
+        AUXTargets,
+        AUXCommand,
+        AUXCommunicator,
+        pack_int3_steps,
+        unpack_int3_steps,
+        STEPS_PER_REVOLUTION,
+    )
+    from alignment import (
+        AlignmentModel,
+        vector_from_radec,
+        vector_from_altaz,
+        vector_to_radec,
+        vector_to_altaz,
+    )
 
 # Load configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1771,7 +1789,7 @@ class CelestronAUXDriver(IPyDriver):
         await self.aux_power_vector.send_setVector()
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Celestron AUX INDI Driver")
     parser.add_argument(
         "--port",
@@ -1782,3 +1800,7 @@ if __name__ == "__main__":
 
     driver = CelestronAUXDriver()
     asyncio.run(driver.asyncrun())
+
+
+if __name__ == "__main__":
+    main()

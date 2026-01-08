@@ -2,7 +2,12 @@ import asyncio
 import unittest
 import math
 import random
-from simulator.nse_telescope import NexStarScope, pack_int3, unpack_int3, make_checksum
+from celestron_aux.simulator.nse_telescope import (
+    NexStarScope,
+    pack_int3,
+    unpack_int3,
+    make_checksum,
+)
 
 
 class TestSimulatorImperfections(unittest.IsolatedAsyncioTestCase):

@@ -2,7 +2,7 @@ import asyncio
 import unittest
 import numpy as np
 import math
-from alignment import AlignmentModel, vector_from_altaz, vector_to_altaz
+from celestron_aux.alignment import AlignmentModel, vector_from_altaz, vector_to_altaz
 
 
 class TestAlignmentSVD(unittest.TestCase):

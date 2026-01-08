@@ -21,7 +21,10 @@ from math import pi
 import math
 import sys
 
-from nse_telescope import NexStarScope, repr_angle, trg_names, cmd_names
+try:
+    from .nse_telescope import NexStarScope, repr_angle, trg_names, cmd_names
+except ImportError:
+    from nse_telescope import NexStarScope, repr_angle, trg_names, cmd_names
 
 # Load configuration
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
@@ -470,8 +473,12 @@ async def main_async():
     stell_server.close()
 
 
-if __name__ == "__main__":
+def main():
     try:
         asyncio.run(main_async())
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    main()

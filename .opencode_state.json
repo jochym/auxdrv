@@ -33,6 +33,7 @@
   - Standardized properties and slew rates.
   - Added Power/Battery telemetry.
   - Added extended GPS satellite status.
+- **Configuration**: Centralized all settings in `config.yaml` and supported CLI/Env overrides.
 - **I18n**: Project translated to English for public release.
 
 ### In Progress 🔄

@@ -46,3 +46,12 @@ Features used less frequently or specific to high-level Deep Sky astrophotograph
     - Implement recording, playback, and enabling correction.
 - [ ] **Hibernacja (Hibernate)**
     - Implement hibernation mode (saving alignment state to persistent mount memory and safe shutdown).
+
+## 5. Packaging and Distribution (Planned Release)
+The driver will be packaged for PyPI to allow easy installation via standard tools.
+
+- [x] **Refactor to `src` layout**
+- [x] **Prepare `pyproject.toml`**
+- [x] **Standalone executable entry points**
+- [ ] **Internal INDI Server** (Optional)
+    - Consider using `indipyserver` to allow the driver to run as a network server without external `indiserver`.

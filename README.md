@@ -28,11 +28,11 @@ pip install indipydriver pyserial-asyncio ephem pyyaml textual rich numpy scipy
 ## Running
 
 1.  **Starting the simulator:**
-    *   Graphical mode (Textual TUI): `python simulator/nse_simulator.py`
-    *   Headless mode (background): `python simulator/nse_simulator.py -t`
+    *   Graphical mode (Textual TUI): `python src/celestron_aux/simulator/nse_simulator.py`
+    *   Headless mode (background): `python src/celestron_aux/simulator/nse_simulator.py -t`
 2.  **Starting the INDI driver:**
     ```bash
-    python celestron_indi_driver.py
+    python src/celestron_aux/celestron_indi_driver.py
     ```
 
 To connect to the simulator, use the port: `socket://localhost:2000`.
