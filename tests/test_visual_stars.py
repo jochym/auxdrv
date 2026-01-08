@@ -56,8 +56,18 @@ class TestVisualStars(unittest.IsolatedAsyncioTestCase):
 
     async def test_slew_to_bright_stars(self):
         """Slew to Capella, Castor, and Betelgeuse for visual verification."""
-        stars_to_test = ["Capella", "Castor", "Betelgeuse"]
+        # 1. Enable Anti-backlash (Fixed Offset)
+        self.driver.approach_disabled.membervalue = "Off"
+        self.driver.approach_fixed.membervalue = "On"
+        self.driver.approach_azm_offset.membervalue = 10000
+        self.driver.approach_alt_offset.membervalue = 10000
 
+        # 2. Set Coord Set Mode to TRACK
+        for name in self.driver.coord_set_vector:
+            self.driver.coord_set_vector[name] = "Off"
+        self.driver.set_track.membervalue = "On"
+
+        stars_to_test = ["Capella", "Castor", "Betelgeuse"]
         self.driver.update_observer()
 
         for star_name in stars_to_test:
@@ -75,23 +85,26 @@ class TestVisualStars(unittest.IsolatedAsyncioTestCase):
             self.driver.ra.membervalue = ra_hours
             self.driver.dec.membervalue = dec_deg
 
-            # Set GoTo mode
-            for name in self.driver.coord_set_vector:
-                self.driver.coord_set_vector[name] = "Off"
-            self.driver.set_slew.membervalue = "On"
-
-            # Trigger GoTo
+            # Trigger GoTo (via handle_equatorial_goto because set_track is On)
             await self.driver.handle_equatorial_goto(None)
 
-            # Wait for completion (poll status)
-            for _ in range(60):
+            # Wait for slew completion
+            for _ in range(90):
                 await self.driver.read_mount_position()
                 if self.driver.slewing_light.membervalue == "Idle":
                     break
                 await asyncio.sleep(1)
 
-            print(f"Reached {star_name}. Observing for 5 seconds...")
-            await asyncio.sleep(5)
+            print(f"Reached {star_name}. Tracking for 15 seconds...")
+            await asyncio.sleep(15)
+
+            # Stop motion
+            print("Stopping motion...")
+            for name in self.driver.track_mode_vector:
+                self.driver.track_mode_vector[name] = "Off"
+            self.driver.track_none.membervalue = "On"
+            await self.driver.handle_track_mode(None)
+            await asyncio.sleep(2)
 
 
 if __name__ == "__main__":
