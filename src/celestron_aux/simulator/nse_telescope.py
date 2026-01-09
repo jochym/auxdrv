@@ -368,7 +368,8 @@ class NexStarScope:
         )
 
         # 3. Periodic Error (RA/Azm only)
-        sky_azm += self.pe_amplitude * sin(2 * pi * self.sim_time / self.pe_period)
+        if self.pe_period > 0:
+            sky_azm += self.pe_amplitude * sin(2 * pi * self.sim_time / self.pe_period)
 
         # 4. Atmospheric Refraction (Approximate formula)
         if self.refraction_enabled:
@@ -421,7 +422,12 @@ class NexStarScope:
 
     def _set_guiderate(self, data, snd, rcv, factor):
         """Helper to set guiding rates."""
-        a = (2**24 / 1024 / 360 / 3600) * unpack_int3(data) * factor
+        # val is in units of (STEPS_PER_REVOLUTION / (360*3600*1024)) steps/sec
+        # We want guiderate in rotations/sec
+        val = unpack_int3(data) * (2**24)
+        # rate_steps_per_sec = val * (STEPS_PER_REVOLUTION / (360*3600*1024))
+        # rate_rot_per_sec = rate_steps_per_sec / STEPS_PER_REVOLUTION = val / (360*3600*1024)
+        a = (val * factor) / (360.0 * 3600.0 * 1024.0)
         self.guiding = abs(a) > 0
         if rcv == 0x11:
             self.alt_guiderate = a
@@ -443,7 +449,7 @@ class NexStarScope:
         self.last_cmd = "GOTO_SLOW"
         self.slewing = self.goto = True
         self.guiding = False
-        r = 1.0 / 360  # 1.0 deg/s (Rate 7)
+        r = 0.1 / 360  # 0.1 deg/s (Very slow precision approach)
         a = unpack_int3(data)
 
         if rcv == 0x11:
@@ -464,7 +470,9 @@ class NexStarScope:
     def slew_done(self, data, snd, rcv):
         """Checks if slew movement is finished."""
         rate = self.alt_rate if rcv == 0x11 else self.azm_rate
-        return b"\x00" if rate else b"\xff"
+        # Use epsilon check to match tick() logic
+        eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
+        return b"\x00" if abs(rate) > eps else b"\xff"
 
     def at_index(self, data, snd, rcv):
         return b"\x00"

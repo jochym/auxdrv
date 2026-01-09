@@ -42,7 +42,7 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
                 "-u",
                 "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
-                "-p",
+                "--perfect", "-p",
                 str(cls.sim_port),
             ],
             stdout=cls.sim_log,

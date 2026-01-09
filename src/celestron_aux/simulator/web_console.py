@@ -100,8 +100,10 @@ class WebConsole:
                     "alt": sky_alt * 360.0,
                     "ra": str(ra),
                     "dec": str(dec),
-                    "v_azm": self.telescope.azm_rate * 360.0,
-                    "v_alt": self.telescope.alt_rate * 360.0,
+                    "v_azm": (self.telescope.azm_rate + self.telescope.azm_guiderate)
+                    * 360.0,
+                    "v_alt": (self.telescope.alt_rate + self.telescope.alt_guiderate)
+                    * 360.0,
                     "slewing": self.telescope.slewing,
                     "guiding": self.telescope.guiding,
                     "voltage": self.telescope.bat_voltage / 1e6,
@@ -155,7 +157,7 @@ INDEX_HTML = """
     <title>Celestron AUX 3D Console</title>
     <style>
         body { margin: 0; overflow: hidden; background: #1a1b26; color: #7aa2f7; font-family: monospace; }
-        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 25vw; min-width: 250px; font-size: 1.65vw; }
+        #info { position: absolute; top: 1vh; left: 1vw; background: rgba(26, 27, 38, 0.8); padding: 1.5vh; border: 1px solid #414868; border-radius: 4px; pointer-events: none; width: 25vw; min-width: 250px; font-size: 1.1vw; }
         #sky-view { position: absolute; top: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.8); border: 1px solid #414868; width: 30vh; height: 30vh; border-radius: 50%; overflow: hidden; }
         #zoom-view { position: absolute; bottom: 1vh; right: 1vw; background: rgba(0, 0, 0, 0.9); border: 2px solid #f7768e; width: 30vh; height: 30vh; border-radius: 4px; overflow: hidden; }
         #controls { position: absolute; bottom: 1vh; left: 1vw; color: #565f89; font-size: 1vw; }
@@ -217,16 +219,16 @@ INDEX_HTML = """
         scene.add(new THREE.GridHelper(10, 20, 0x414868, 0x24283b));
         
         // --- Utility for text labels ---
-        function createLabel(text, color = '#7aa2f7', fontSize = 36, scale = 0.2) {
+        function createLabel(text, color = '#7aa2f7', fontSize = 72, scale = 0.4) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 128;
-            canvas.height = 128;
+            canvas.width = 256;
+            canvas.height = 256;
             ctx.fillStyle = color;
             ctx.font = `bold ${fontSize}px monospace`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(text, 64, 64);
+            ctx.fillText(text, 128, 128);
             const texture = new THREE.CanvasTexture(canvas);
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMaterial);
@@ -262,7 +264,7 @@ INDEX_HTML = """
             azScale.add(tick);
             
             if (isMajor) {
-                const label = createLabel(i.toString(), '#565f89', 36, 0.2);
+                const label = createLabel(i.toString(), '#565f89', 72, 0.4);
                 label.position.set(Math.sin(rad) * 0.65, 0, Math.cos(rad) * 0.65);
                 azScale.add(label);
             }
@@ -281,8 +283,8 @@ INDEX_HTML = """
         azmGroup.add(azDot);
 
         // Cardinal points
-        const cardinalN = createLabel("N", "#f7768e", 48, 0.3); cardinalN.position.set(0, geo.base_height, 0.9); scene.add(cardinalN);
-        const cardinalS = createLabel("S", "#7aa2f7", 48, 0.3); cardinalS.position.set(0, geo.base_height, -0.9); scene.add(cardinalS);
+        const cardinalN = createLabel("N", "#f7768e", 48, 0.3); cardinalN.position.set(0, geo.base_height, 0.8); scene.add(cardinalN);
+        const cardinalS = createLabel("S", "#7aa2f7", 48, 0.3); cardinalS.position.set(0, geo.base_height, -0.8); scene.add(cardinalS);
         const cardinalE = createLabel("E", "#7aa2f7", 48, 0.3); cardinalE.position.set(0.9, geo.base_height, 0); scene.add(cardinalE);
         const cardinalW = createLabel("W", "#7aa2f7", 48, 0.3); cardinalW.position.set(-0.9, geo.base_height, 0); scene.add(cardinalW);
 
@@ -312,7 +314,7 @@ INDEX_HTML = """
             altScale.add(tick);
             
             if (isMajor) {
-                const label = createLabel(i.toString(), '#565f89', 36, 0.2);
+                const label = createLabel(i.toString(), '#565f89', 72, 0.4);
                 label.position.set(0.05, Math.sin(rad) * (altRadius + 0.15), Math.cos(rad) * (altRadius + 0.15));
                 altScale.add(label);
             }
@@ -320,15 +322,15 @@ INDEX_HTML = """
         altScale.position.set(geo.fork_width + geo.arm_thickness/2, geo.fork_height * 0.8, 0);
         azmGroup.add(altScale);
 
-        // Altitude Indicator Dot (Moves with OTA)
-        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
-        altDot.position.set(geo.fork_width + geo.arm_thickness/2 + 0.02, 0, altRadius);
-
         // Altitude Group (Rotates around X)
         const altGroup = new THREE.Group();
         altGroup.position.set(0, geo.fork_height * 0.8, 0);
-        altGroup.add(altDot);
         azmGroup.add(altGroup);
+
+        // Altitude Indicator Dot (Moves with OTA)
+        const altDot = new THREE.Mesh(new THREE.SphereGeometry(0.02), indicatorMaterial);
+        altDot.position.set(geo.fork_width + geo.arm_thickness/2 + 0.02, 0, altRadius);
+        altGroup.add(altDot);
 
         // OTA
         const ota = new THREE.Mesh(new THREE.CylinderGeometry(geo.ota_radius, geo.ota_radius, geo.ota_length, 32), otaMaterial);

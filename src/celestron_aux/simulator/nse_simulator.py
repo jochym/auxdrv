@@ -232,7 +232,17 @@ async def main_async():
         default=sim_cfg.get("web_host", "127.0.0.1"),
         help="Web console host (default: 127.0.0.1)",
     )
+    parser.add_argument(
+        "--perfect", action="store_true", help="Disable all mechanical imperfections"
+    )
     args = parser.parse_args()
+
+    if args.perfect:
+        if "simulator" in config and "imperfections" in config["simulator"]:
+            for key in config["simulator"]["imperfections"]:
+                config["simulator"]["imperfections"][key] = 0
+            config["simulator"]["imperfections"]["refraction_enabled"] = False
+            config["simulator"]["imperfections"]["clock_drift"] = 0.0
 
     global telescope
     obs = ephem.Observer()

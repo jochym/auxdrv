@@ -2,10 +2,10 @@
 Celestron AUX INDI Driver
 
 This module implements an INDI driver for Celestron mounts using the AUX protocol.
-It uses the `indipydriver` library for INDI communication and `ephem` for
+It uses the indipydriver library for INDI communication and ephem for
 astronomical calculations.
 
-Configuration is loaded from `config.yaml`.
+Configuration is loaded from config.yaml.
 """
 
 import asyncio
@@ -32,7 +32,6 @@ import argparse
 
 try:
     from indipyserver import IPyServer
-
     HAS_SERVER = True
 except ImportError:
     HAS_SERVER = False
@@ -798,6 +797,8 @@ class CelestronAUXDriver(IPyDriver):
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
 
+        # IMPORTANT: Use a local base time to avoid cumulative drift
+        self.observer.date = ephem.now()
         if time_offset != 0:
             self.observer.date = ephem.Date(self.observer.date + time_offset / 86400.0)
 
@@ -918,7 +919,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def handle_limits(self, event):
         """Updates internal slew limits."""
-        self.limits_vector.update(event.root)
+        if event is not None:
+            self.limits_vector.update(event)
         await self.limits_vector.send_setVector(state="Ok")
 
     async def handle_abort_motion(self, event):
@@ -1227,13 +1229,13 @@ class CelestronAUXDriver(IPyDriver):
 
     async def _wait_for_slew(self, axis):
         """Waits until the specified axis finishes slewing."""
-        for _ in range(120):  # 120 seconds timeout
+        for _ in range(600):  # 120 seconds timeout (0.2s poll)
             cmd = AUXCommand(AUXCommands.MC_SLEW_DONE, AUXTargets.APP, axis)
             resp = await self.communicator.send_command(cmd)
             # Response 0xFF means done
             if resp and len(resp.data) >= 1 and resp.data[0] == 0xFF:
                 return True
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.2)
         return False
 
     async def _do_slew(self, axis, steps, fast=True):
@@ -1481,10 +1483,6 @@ class CelestronAUXDriver(IPyDriver):
 
             # 3. Calculate weight with Local Bias Proximity
             weight = 1.0
-            bias = float(self.align_local_bias.membervalue) / 100.0
-            if bias > 0 and self._align_model.points:
-                # We could implement distance-based weighting here
-                pass
 
             # 4. Add point to alignment model (Thinning handled inside)
             sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
@@ -1515,19 +1513,34 @@ class CelestronAUXDriver(IPyDriver):
         else:
             # Perform GOTO
             await self.equatorial_vector.send_setVector(state="Busy")
-            azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
-            success = await self.goto_position(
-                azm_steps, alt_steps, ra=target_ra, dec=target_dec
-            )
-
-            if success:
-                await asyncio.gather(
-                    self._wait_for_slew(AUXTargets.AZM),
-                    self._wait_for_slew(AUXTargets.ALT),
+            
+            # Use iterative refinement for high precision
+            for attempt in range(2):
+                target_ra, target_dec = await self._get_target_equatorial()
+                azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
+                success = await self.goto_position(
+                    azm_steps, alt_steps, ra=target_ra, dec=target_dec
                 )
-                await self.equatorial_vector.send_setVector(state="Ok")
-            else:
-                await self.equatorial_vector.send_setVector(state="Alert")
+
+                if success:
+                    await asyncio.gather(
+                        self._wait_for_slew(AUXTargets.AZM),
+                        self._wait_for_slew(AUXTargets.ALT),
+                    )
+                else:
+                    await self.equatorial_vector.send_setVector(state="Alert")
+                    return
+
+            # Immediately start tracking if Coord Set Mode is TRACK
+            if self.set_track.membervalue == "On":
+                if self._tracking_task:
+                    self._tracking_task.cancel()
+                self._tracking_task = asyncio.create_task(self._tracking_loop())
+                self.tracking_light.membervalue = "Ok"
+                self.slewing_light.membervalue = "Idle"
+                await self.mount_status_vector.send_setVector()
+
+            await self.equatorial_vector.send_setVector(state="Ok")
 
     async def _get_target_equatorial(self, time_offset: float = 0):
         """Returns JNow RA/Dec for the currently selected target type."""
@@ -1687,7 +1700,7 @@ class CelestronAUXDriver(IPyDriver):
         try:
             while True:
                 if not self.communicator or not self.communicator.connected:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.2)
                     continue
 
                 dt = 1.0
@@ -1722,7 +1735,7 @@ class CelestronAUXDriver(IPyDriver):
                     else AUXCommands.MC_SET_NEG_GUIDERATE,
                     AUXTargets.APP,
                     AUXTargets.AZM,
-                    pack_int3_steps(min(val_azm, 0xFFFF)),
+                    pack_int3_steps(min(val_azm, 0xFFFFFF)),
                 )
                 cmd_alt = AUXCommand(
                     AUXCommands.MC_SET_POS_GUIDERATE
@@ -1730,7 +1743,7 @@ class CelestronAUXDriver(IPyDriver):
                     else AUXCommands.MC_SET_NEG_GUIDERATE,
                     AUXTargets.APP,
                     AUXTargets.ALT,
-                    pack_int3_steps(min(val_alt, 0xFFFF)),
+                    pack_int3_steps(min(val_alt, 0xFFFFFF)),
                 )
 
                 await self.communicator.send_command(cmd_azm)
