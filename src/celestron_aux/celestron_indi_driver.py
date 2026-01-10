@@ -9,7 +9,6 @@ Configuration is loaded from config.yaml.
 """
 
 from __future__ import annotations
-from __future__ import annotations
 import asyncio
 from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING
 import indipydriver
@@ -32,10 +31,6 @@ import os
 import math
 import numpy as np
 import argparse
-
-if TYPE_CHECKING:
-    from .celestron_aux_driver import AUXCommunicator
-
 
 if TYPE_CHECKING:
     from .celestron_aux_driver import AUXCommunicator
