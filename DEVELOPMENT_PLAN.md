@@ -75,3 +75,6 @@ High-precision motion control.
     - Sub-step rate estimation with $dt=30s$.
 - [x] **Automated Real-World Validation**
     - Script for measuring pointing and tracking accuracy under mechanical stress.
+- [x] **PEC Measurement Suite**
+    - Standalone script `scripts/pec_measure.py` using ASTAP for sensor-based PE analysis.
+
