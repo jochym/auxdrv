@@ -3,6 +3,7 @@ import unittest
 import math
 import ephem
 import os
+import sys
 import subprocess
 import time
 from celestron_aux.celestron_indi_driver import CelestronAUXDriver, AUXTargets
@@ -33,7 +34,7 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_moving_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
-                "./venv/bin/python",
+                sys.executable,
                 "-u",
                 "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",

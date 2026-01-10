@@ -22,11 +22,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install .[simulator,web]
-        pip install pytest pytest-asyncio mypy types-PyYAML
+        pip install .[simulator,web,dev]
     - name: Run tests
       run: |
-        export PYTHONPATH=$PYTHONPATH:$(pwd)/src
         pytest tests/
     - name: Run mypy
       run: |

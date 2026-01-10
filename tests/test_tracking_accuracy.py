@@ -6,6 +6,7 @@ import numpy as np
 import time
 import subprocess
 import os
+import sys
 from celestron_aux.celestron_indi_driver import CelestronAUXDriver, STEPS_PER_REVOLUTION
 
 
@@ -29,7 +30,7 @@ class TestTrackingAccuracy(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_accuracy_sim.log", "w")
         cls.sim_process = subprocess.Popen(
             [
-                "./venv/bin/python",
+                sys.executable,
                 "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
                 "-d",

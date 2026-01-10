@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 import os
+import sys
 import subprocess
 import time
 from celestron_aux.celestron_indi_driver import (
@@ -38,16 +39,18 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_safety_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
-                "./venv/bin/python",
+                sys.executable,
                 "-u",
                 "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
-                "--perfect", "-p",
+                "--perfect",
+                "-p",
                 str(cls.sim_port),
             ],
             stdout=cls.sim_log,
             stderr=cls.sim_log,
         )
+
         time.sleep(2)
 
     @classmethod

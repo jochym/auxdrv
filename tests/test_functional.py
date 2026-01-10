@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 import os
+import sys
 import signal
 import subprocess
 import time
@@ -46,12 +47,11 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
-                "./venv/bin/python",
+                sys.executable,
                 "-u",
                 "src/celestron_aux/simulator/nse_simulator.py",
                 "-t",
                 "-d",
-                "--perfect",
                 "--perfect",
                 "-p",
                 str(cls.sim_port),
