@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.5] - 2026-01-09
+
+### Added
+- **Adaptive Alignment Model**: The mathematical model now scales with the number of alignment points (SVD for 1-2 pts, 4-parameter for 3-5 pts, 6-parameter for 6+ pts).
+- **Sub-step Rate Estimation**: Maintains floating-point precision during velocity calculation to eliminate quantization drift.
+- **Simulation Backdoor**: Added `SIM_GET_SKY_POSITION` (0xFF) for ground-truth verification in simulation.
+
+### Fixed
+- **Tracking Stability**: Switched to a 30s differentiation window, matching the reference driver's high-inertia approach.
+- **Documentation**: Updated `DEVELOPMENT_PLAN.md` and `GEMINI.md` to reflect the latest project status.
+
 ## [1.6.4] - 2026-01-09
 
 ### Added
