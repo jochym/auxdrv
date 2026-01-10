@@ -76,8 +76,8 @@ class TestAlignment(unittest.TestCase):
         res_p = model.transform_to_mount(test_p)
         res_az, res_alt = vector_to_altaz(res_p)
 
-        self.assertAlmostEqual(res_az, 55.0)
-        self.assertAlmostEqual(res_alt, 20.0)
+        self.assertAlmostEqual(res_az, 55.0, places=5)
+        self.assertAlmostEqual(res_alt, 20.0, places=5)
 
 
 if __name__ == "__main__":

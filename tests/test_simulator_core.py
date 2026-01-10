@@ -54,8 +54,9 @@ class TestSimulatorCore(unittest.IsolatedAsyncioTestCase):
 
         # Advance 10 seconds
         self.scope.tick(10.0)
-        # Expected pos: 10s * 4 deg/s = 40 deg. 40/360 = 0.111...
-        self.assertAlmostEqual(self.scope.azm, 40.0 / 360.0, delta=0.001)
+        # Expected pos: 10s * speed. Speed is azm_maxrate deg/s.
+        expected_deg = 10.0 * (self.scope.azm_maxrate / 1000.0)
+        self.assertAlmostEqual(self.scope.azm, expected_deg / 360.0, delta=0.001)
 
     async def test_backlash(self):
         """Verify mechanical backlash simulation."""

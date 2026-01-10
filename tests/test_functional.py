@@ -522,7 +522,7 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
         original_update = self.driver.update_observer
 
         def patched_update(time_offset: float = 0, base_date=None):
-            self.driver.observer.date = base_date or ephem.now()
+            self.driver.observer.date = base_date or fixed_date
             if time_offset != 0:
                 self.driver.observer.date = ephem.Date(
                     self.driver.observer.date + time_offset / 86400.0

@@ -1,6 +1,6 @@
 # Development of INDI Driver for Celestron AUX Mount (Python)
 
-## Current Project Status (v1.6.4)
+## Current Project Status (v1.6.5)
 
 The driver has achieved high functional parity with reference implementations and features a sophisticated "Digital Twin" simulator with 3D visualization and real-time schematic sky view. The tracking system has been optimized for sub-arcsecond stability.
 
@@ -11,14 +11,14 @@ The driver has achieved high functional parity with reference implementations an
 *   ✅ **Plug & Play:** Dynamic mount model and type detection (`MC_GET_MODEL`).
 *   ✅ **Time/Site:** Support for reading/writing RTC and Location data to the hardware.
 *   ✅ **Astronomy:** RA/Dec <-> Encoder transformations, 2nd order prediction, anti-backlash GoTo.
-*   ✅ **Tracking:** High-inertia Dead Reckoning (dt=30s) with sub-step precision in rate estimation, achieving <1" stability.
-*   ✅ **Alignment:** Advanced **6-Parameter Geometric solver** with **Residual-Aware Grid Thinning**.
+*   ✅ **Tracking:** High-inertia Dead Reckoning (dt=30s) with sub-step precision in rate estimation, achieving <1" stability in pure simulation.
+*   ✅ **Alignment:** Advanced **6-Parameter Geometric solver** with **Adaptive Complexity** (SVD -> 4-param -> 6-param).
 *   ✅ **Homing:** Support for automated homing and leveling.
 *   ✅ **Peripherals:** Support for Focuser, GPS, and Power/Battery telemetry.
 *   ✅ **Validation:** Real-world validation script (`scripts/real_world_validation.py`) verifying local alignment accuracy under mechanical errors.
 *   ✅ **Simulator:** High-fidelity **NSE Simulator** with Textual TUI, 3D Web Console, and **Schematic Sky View**.
 *   ✅ **Packaging:** PyPI-ready structure with `src` layout, `pyproject.toml`, and optional `[web]` extras.
-*   ✅ **Testing:** 38+ automated tests covering all subsystems.
+*   ✅ **Testing:** 41+ automated tests covering all subsystems.
 
 ---
 
