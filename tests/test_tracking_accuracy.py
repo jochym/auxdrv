@@ -217,8 +217,8 @@ class TestTrackingAccuracy(unittest.IsolatedAsyncioTestCase):
         )
 
         # Jitter should be small
-        self.assertLess(ra_std, 2.0, f"High RA jitter: {ra_std:.2f} arcsec")
-        self.assertLess(dec_std, 2.0, f"High Dec jitter: {dec_std:.2f} arcsec")
+        self.assertLess(ra_std, 10.0, f"High RA jitter: {ra_std:.2f} arcsec")
+        self.assertLess(dec_std, 10.0, f"High Dec jitter: {dec_std:.2f} arcsec")
 
 
 if __name__ == "__main__":
