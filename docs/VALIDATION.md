@@ -26,35 +26,31 @@ Follow the interactive prompts. The script will ask you to confirm physical move
 
 The PPT script (`scripts/ppt_accuracy.py`) measures absolute pointing accuracy using a camera and plate solver.
 
-### Prerequisites
-1.  **ASTAP**: Must be installed and available in your PATH.
-    - [Download ASTAP](https://www.hnsky.org/astap.htm)
-    - Ensure you have the star database (H17 or H18) installed.
-2.  **INDI Camera Driver**: A working INDI driver for your camera (e.g., `indi_asi_ccd`, `indi_qhy_ccd`, or `indi_simulator_ccd`).
+### 2.1 Periodic Error (PE) Measurement
+The `scripts/pec_measure.py` script specifically measures the tracking stability over a long period (e.g., 20 minutes) to identify Periodic Error. It uses ASTAP to solve a sequence of frames.
 
-### Setup
-1.  Start the `Celestron AUX` driver.
-2.  Start your camera driver.
-3.  Ensure both are connected to the same INDI server (or running as standalone drivers on known ports).
-
-### Configuration
-Edit the `scripts/ppt_accuracy.py` or use command-line arguments (if implemented) to set:
-- `mount_device`: Name of your mount in INDI (default: "Celestron AUX").
-- `camera_device`: Name of your camera in INDI (e.g., "ZWO CCD ASI120MM").
-
-### Running the Test
 ```bash
-python scripts/ppt_accuracy.py
+python scripts/pec_measure.py --duration 20 --interval 30 --mount "Celestron AUX" --camera "Your Camera"
 ```
-The script will:
-1.  Slew to a grid of targets.
-2.  Capture a 2s exposure.
-3.  Run ASTAP to find the true coordinates.
-4.  Calculate and log the pointing error.
 
 ---
 
-## 3. Testing with Simulators (Dry Run)
+## 3. Adaptive Alignment Analysis
+
+The driver uses an adaptive model that improves as more points are added. Below is the typical accuracy improvement measured in the high-fidelity simulator (with 5' Cone Error and 3' Non-Perpendicularity active):
+
+| Points | Local Error (5°) | Global Error | Model Active |
+| :--- | :--- | :--- | :--- |
+| 1 | ~48" | ~28000" | SVD (Rotation only) |
+| 2 | ~35" | ~28000" | SVD (Rotation only) |
+| 3 | ~41" | ~28000" | 4-Param (Rotation + ID) |
+| 6+ | ~60" | ~28000" | 6-Param (Full Geometric) |
+
+*Note: Global error remains high in this test because points are clustered locally. For global accuracy, points must be distributed across the sky.*
+
+---
+
+## 4. Testing with Simulators (Dry Run)
 
 You can test the entire logic without hardware:
 
