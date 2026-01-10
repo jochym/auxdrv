@@ -1221,6 +1221,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def slew_by_rate(self, axis, rate, direction):
         """Sends a rate-based slew command to a motor axis."""
+        if not self.communicator or not self.communicator.connected:
+            return
         cmd_type = (
             AUXCommands.MC_MOVE_POS if direction == 1 else AUXCommands.MC_MOVE_NEG
         )
@@ -1232,6 +1234,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def _wait_for_slew(self, axis):
         """Waits until the specified axis finishes slewing."""
+        if not self.communicator or not self.communicator.connected:
+            return True
         for _ in range(600):  # 120 seconds timeout (0.2s poll)
             cmd = AUXCommand(AUXCommands.MC_SLEW_DONE, AUXTargets.APP, axis)
             resp = await self.communicator.send_command(cmd)
@@ -1243,6 +1247,8 @@ class CelestronAUXDriver(IPyDriver):
 
     async def _do_slew(self, axis, steps, fast=True):
         """Sends a position-based GoTo command to a motor axis (low-level)."""
+        if not self.communicator or not self.communicator.connected:
+            return False
         cmd_type = AUXCommands.MC_GOTO_FAST if fast else AUXCommands.MC_GOTO_SLOW
         cmd = AUXCommand(cmd_type, AUXTargets.APP, axis, pack_int3_steps(steps))
         resp = await self.communicator.send_command(cmd)
