@@ -1762,15 +1762,37 @@ class CelestronAUXDriver(IPyDriver):
                     await asyncio.sleep(0.2)
                     continue
 
-                rate_azm, rate_alt = await self.get_tracking_rates(
-                    self.current_target_ra, self.current_target_dec
+                dt = 30.0
+                base_now = ephem.now()
+                # Get target position at T+dt and T-dt (handles moving objects)
+                ra_plus, dec_plus = await self._get_target_equatorial(
+                    time_offset=dt, base_date=base_now
                 )
+                ra_minus, dec_minus = await self._get_target_equatorial(
+                    time_offset=-dt, base_date=base_now
+                )
+
+                s_plus_azm, s_plus_alt = await self.equatorial_to_steps(
+                    ra_plus, dec_plus, time_offset=dt, base_date=base_now
+                )
+                s_minus_azm, s_minus_alt = await self.equatorial_to_steps(
+                    ra_minus, dec_minus, time_offset=-dt, base_date=base_now
+                )
+
+                def diff_steps(s2: float, s1: float) -> float:
+                    d = s2 - s1
+                    if d > STEPS_PER_REVOLUTION / 2:
+                        d -= STEPS_PER_REVOLUTION
+                    if d < -STEPS_PER_REVOLUTION / 2:
+                        d += STEPS_PER_REVOLUTION
+                    return d
+
+                rate_azm = diff_steps(s_plus_azm, s_minus_azm) / (2.0 * dt)
+                rate_alt = diff_steps(s_plus_alt, s_minus_alt) / (2.0 * dt)
 
                 factor = (360.0 * 3600.0 * 1024.0) / STEPS_PER_REVOLUTION
                 val_azm = int(round(abs(rate_azm) * factor))
                 val_alt = int(round(abs(rate_alt) * factor))
-
-                # print(f"TRACK: val_azm={val_azm} val_alt={val_alt}")
 
                 cmd_azm = AUXCommand(
                     AUXCommands.MC_SET_POS_GUIDERATE
