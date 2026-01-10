@@ -6,11 +6,12 @@ alignment stars.
 """
 
 import math
+from typing import List, Tuple, Dict, Any, Optional, Union
 import numpy as np
 from scipy.optimize import least_squares
 
 
-def angular_distance(az1, alt1, az2, alt2):
+def angular_distance(az1: float, alt1: float, az2: float, alt2: float) -> float:
     """Calculates angular distance between two points in degrees."""
     r1 = math.radians(alt1)
     r2 = math.radians(alt2)
@@ -22,7 +23,7 @@ def angular_distance(az1, alt1, az2, alt2):
     return math.degrees(math.acos(max(-1.0, min(1.0, cos_dist))))
 
 
-def vector_from_radec(ra_hours, dec_deg):
+def vector_from_radec(ra_hours: float, dec_deg: float) -> List[float]:
     """Converts RA/Dec to a 3D unit vector."""
     ra_rad = math.radians(ra_hours * 15.0)
     dec_rad = math.radians(dec_deg)
@@ -33,7 +34,7 @@ def vector_from_radec(ra_hours, dec_deg):
     ]
 
 
-def vector_from_altaz(az_deg, alt_deg):
+def vector_from_altaz(az_deg: float, alt_deg: float) -> List[float]:
     """Converts Alt/Az to a 3D unit vector."""
     az_rad = math.radians(az_deg)
     alt_rad = math.radians(alt_deg)
@@ -44,11 +45,11 @@ def vector_from_altaz(az_deg, alt_deg):
     ]
 
 
-def vector_to_radec(vec):
+def vector_to_radec(vec: Union[List[float], np.ndarray]) -> Tuple[float, float]:
     """Converts a 3D unit vector to RA (hours) and Dec (degrees)."""
     norm = math.sqrt(sum(x * x for x in vec))
     if norm < 1e-9:
-        return 0, 0
+        return 0.0, 0.0
     vx, vy, vz = [x / norm for x in vec]
 
     dec_rad = math.asin(max(-1.0, min(1.0, vz)))
@@ -59,11 +60,11 @@ def vector_to_radec(vec):
     return ra_hours % 24.0, dec_deg
 
 
-def vector_to_altaz(vec):
+def vector_to_altaz(vec: Union[List[float], np.ndarray]) -> Tuple[float, float]:
     """Converts a 3D unit vector to Azimuth and Altitude (degrees)."""
     norm = math.sqrt(sum(x * x for x in vec))
     if norm < 1e-9:
-        return 0, 0
+        return 0.0, 0.0
     vx, vy, vz = [x / norm for x in vec]
 
     alt_rad = math.asin(max(-1.0, min(1.0, vz)))
@@ -80,15 +81,22 @@ class AlignmentModel:
     Compensates for Rotation, Cone Error, Non-Perpendicularity, and Index Offsets.
     """
 
-    def __init__(self):
-        self.points = []  # List of dicts: {'sky': vec, 'mount': vec, 'weight': float}
-        self.matrix = np.identity(3)
-        self.params = np.zeros(6)  # [roll, pitch, yaw, ID, CH, NP]
+    def __init__(self) -> None:
+        self.points: List[
+            Dict[str, Any]
+        ] = []  # List of dicts: {'sky': vec, 'mount': vec, 'weight': float}
+        self.matrix: np.ndarray = np.identity(3)
+        self.params: np.ndarray = np.zeros(6)  # [roll, pitch, yaw, ID, CH, NP]
         self.rms_error_arcsec = 0.0
 
     def add_point(
-        self, sky_vec, mount_vec, weight=1.0, sector_size=15.0, max_per_sector=2
-    ):
+        self,
+        sky_vec: Union[List[float], np.ndarray],
+        mount_vec: Union[List[float], np.ndarray],
+        weight: float = 1.0,
+        sector_size: float = 15.0,
+        max_per_sector: int = 2,
+    ) -> None:
         """
         Adds an alignment point using Residual-Aware Grid Thinning.
         Ensures even sky coverage by managing points in angular sectors.
@@ -143,14 +151,14 @@ class AlignmentModel:
 
         self._compute_model()
 
-    def clear(self):
+    def clear(self) -> None:
         """Clears all alignment points and resets to identity."""
         self.points = []
         self.matrix = np.identity(3)
         self.params = np.zeros(6)
         self.rms_error_arcsec = 0.0
 
-    def _get_rotation_matrix(self, r, p, y):
+    def _get_rotation_matrix(self, r: float, p: float, y: float) -> np.ndarray:
         """Creates a 3D rotation matrix from Euler angles."""
         # Roll, Pitch, Yaw
         c1, s1 = math.cos(r), math.sin(r)
@@ -163,7 +171,9 @@ class AlignmentModel:
 
         return R_z @ R_y @ R_x
 
-    def _transform_internal(self, sky_vec, params):
+    def _transform_internal(
+        self, sky_vec: np.ndarray, params: np.ndarray
+    ) -> List[float]:
         """Applies the 6-parameter model transformation."""
         # 1. Rotation
         R = self._get_rotation_matrix(params[0], params[1], params[2])
@@ -185,7 +195,7 @@ class AlignmentModel:
             az + math.degrees(az_corr_rad), alt + math.degrees(alt_corr_rad)
         )
 
-    def _compute_model(self):
+    def _compute_model(self) -> None:
         """Fits the adaptive geometric model to the collected points."""
         if len(self.points) == 0:
             self.matrix = np.identity(3)
@@ -205,7 +215,7 @@ class AlignmentModel:
         solve_params = 6 if len(self.points) >= 6 else 4
 
         # Refine model using Non-linear Least Squares
-        def residuals(p):
+        def residuals(p: np.ndarray) -> np.ndarray:
             # p might be 4 or 6 elements
             full_p = np.zeros(6)
             full_p[: len(p)] = p
@@ -248,7 +258,7 @@ class AlignmentModel:
         )
         self._calculate_rms()
 
-    def _compute_svd_only(self):
+    def _compute_svd_only(self) -> None:
         """Computes optimal rotation matrix using SVD (fallback)."""
         if len(self.points) < 1:
             self.matrix = np.identity(3)
@@ -285,7 +295,7 @@ class AlignmentModel:
         self.params = np.zeros(6)
         self._calculate_rms()
 
-    def _calculate_rms(self):
+    def _calculate_rms(self) -> None:
         """Calculates RMS error of the fit in arcseconds."""
         if not self.points:
             self.rms_error_arcsec = 0.0
@@ -306,7 +316,12 @@ class AlignmentModel:
         rms_rad = math.sqrt(total_sq_error / len(self.points))
         self.rms_error_arcsec = math.degrees(rms_rad) * 3600.0
 
-    def transform_to_mount(self, sky_vec, target_vec=None, local_bias=0.0):
+    def transform_to_mount(
+        self,
+        sky_vec: Union[List[float], np.ndarray],
+        target_vec: Optional[Union[List[float], np.ndarray]] = None,
+        local_bias: float = 0.0,
+    ) -> List[float]:
         """Applies transformation with optional local weighting."""
         if len(self.points) < 3:
             R = self.matrix
@@ -319,12 +334,18 @@ class AlignmentModel:
 
         return self._transform_internal(np.array(sky_vec), self.params)
 
-    def transform_to_sky(self, mount_vec):
+    def transform_to_sky(
+        self, mount_vec: Union[List[float], np.ndarray]
+    ) -> List[float]:
         """Applies inverse transformation."""
         res = self.matrix.T @ np.array(mount_vec)
         return res.tolist()
 
-    def get_local_matrix(self, target_sky_vec, local_bias):
+    def get_local_matrix(
+        self,
+        target_sky_vec: Union[List[float], np.ndarray],
+        local_bias: float,
+    ) -> np.ndarray:
         """Returns a weighted SVD matrix (Fallback for small point counts)."""
         if local_bias <= 0 or len(self.points) < 2:
             return self.matrix

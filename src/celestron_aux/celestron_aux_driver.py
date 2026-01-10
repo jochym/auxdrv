@@ -15,6 +15,10 @@ import time
 import asyncio
 import serial_asyncio
 from enum import Enum
+from typing import Optional, Union, List, Tuple, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from asyncio import StreamReader, StreamWriter
 
 
 class AUXCommands(Enum):
@@ -107,7 +111,7 @@ class AUXCommand:
         source: AUXTargets,
         destination: AUXTargets,
         data: bytes = b"",
-    ):
+    ) -> None:
         self.command = command
         self.source = source
         self.destination = destination
@@ -132,7 +136,7 @@ class AUXCommand:
         return bytes(buf)
 
     @classmethod
-    def parse_buf(cls, buf: bytes):
+    def parse_buf(cls, buf: bytes) -> "AUXCommand":
         """
         Parses a byte buffer into an AUXCommand object.
 
@@ -167,7 +171,7 @@ class AUXCommand:
         return cmd
 
     @staticmethod
-    def _calculate_checksum(data) -> int:
+    def _calculate_checksum(data: Union[bytes, bytearray]) -> int:
         """
         Calculates the AUX checksum (2's complement of sum).
 
@@ -196,7 +200,7 @@ class AUXCommand:
             value = self.data[0]
         return value
 
-    def set_data_from_int(self, value: int, num_bytes: int):
+    def set_data_from_int(self, value: int, num_bytes: int) -> None:
         """
         Sets the command data payload from an integer.
 
@@ -214,7 +218,7 @@ class AUXCommand:
             raise ValueError("num_bytes must be 1, 2, or 3")
         self.length = 3 + len(self.data)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"AUXCommand(cmd={self.command.name}, src={self.source.name}, dst={self.destination.name}, data={self.data.hex()}, len={self.length})"
 
 
@@ -263,12 +267,12 @@ class AUXCommunicator:
         timeout (float): Read timeout in seconds.
     """
 
-    def __init__(self, port: str, baudrate: int = 19200, timeout: float = 1.0):
+    def __init__(self, port: str, baudrate: int = 19200, timeout: float = 1.0) -> None:
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
-        self.reader = None
-        self.writer = None
+        self.reader: Optional["StreamReader"] = None
+        self.writer: Optional["StreamWriter"] = None
         self.connected = False
         self.lock = asyncio.Lock()
 
@@ -297,7 +301,7 @@ class AUXCommunicator:
             self.connected = False
             return False
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Closes the connection."""
         if self.writer and self.connected:
             self.writer.close()
@@ -305,7 +309,7 @@ class AUXCommunicator:
             self.connected = False
             print(f"Communicator: Disconnected from {self.port}")
 
-    async def send_command(self, command: AUXCommand) -> AUXCommand | None:
+    async def send_command(self, command: AUXCommand) -> Optional[AUXCommand]:
         """
         Sends an AUX command and waits for a response.
 

@@ -4,17 +4,14 @@ Textual-based TUI for the Celestron AUX Simulator.
 
 from datetime import datetime, timezone
 from collections import deque
+from typing import Deque, Any, Dict
 import ephem
 from math import pi
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Log
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, Vertical
 from textual.binding import Binding
-
-try:
-    from .nse_telescope import repr_angle
-except ImportError:
-    from nse_telescope import repr_angle
+from .nse_telescope import NexStarScope, repr_angle
 
 
 class SimulatorApp(App):
@@ -61,15 +58,21 @@ class SimulatorApp(App):
         Binding("u", "unpark", "Unpark", show=True),
     ]
 
-    def __init__(self, tel, obs, args, obs_cfg):
+    def __init__(
+        self,
+        tel: NexStarScope,
+        obs: ephem.Observer,
+        args: Any,
+        obs_cfg: Dict[str, Any],
+    ) -> None:
         super().__init__()
         self.telescope = tel
         self.obs = obs
         self.args = args
         self.obs_cfg = obs_cfg
-        self.ra_samples = deque(maxlen=10)
-        self.dec_samples = deque(maxlen=10)
-        self.time_samples = deque(maxlen=10)
+        self.ra_samples: Deque[float] = deque(maxlen=10)
+        self.dec_samples: Deque[float] = deque(maxlen=10)
+        self.time_samples: Deque[datetime] = deque(maxlen=10)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)

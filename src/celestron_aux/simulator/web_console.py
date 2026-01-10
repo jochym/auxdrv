@@ -5,26 +5,35 @@ Web-based 3D visualization console for the Celestron AUX Simulator.
 import asyncio
 import json
 import math
+from typing import Set, Dict, Any, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 import uvicorn
 import os
+import ephem
+from .nse_telescope import NexStarScope
 
 app = FastAPI()
 
 # Connected WebSocket clients
-clients = set()
+clients: Set[WebSocket] = set()
 # Global geometry config
-mount_geometry = {}
+mount_geometry: Dict[str, Any] = {}
 
 
 class WebConsole:
-    def __init__(self, telescope, obs, host="127.0.0.1", port=8080):
+    def __init__(
+        self,
+        telescope: NexStarScope,
+        obs: ephem.Observer,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+    ) -> None:
         self.telescope = telescope
         self.obs = obs
         self.host = host
         self.port = port
-        self.server_task = None
+        self.server_task: Optional[asyncio.Task] = None
 
         # Load geometry from telescope config
         global mount_geometry
@@ -41,10 +50,9 @@ class WebConsole:
             },
         )
 
-    async def broadcast_state(self):
+    async def broadcast_state(self) -> None:
         """Broadcasts telescope state to all connected clients."""
         from math import pi, degrees, cos, radians
-        import ephem
 
         while True:
             if clients:
@@ -92,7 +100,7 @@ class WebConsole:
                                     "mag": body.mag,
                                 }
                             )
-                    except:
+                    except Exception:
                         continue
 
                 state = {
@@ -116,7 +124,7 @@ class WebConsole:
                 for client in clients:
                     try:
                         await client.send_text(message)
-                    except:
+                    except Exception:
                         disconnected.add(client)
 
                 for d in disconnected:
@@ -124,7 +132,7 @@ class WebConsole:
 
             await asyncio.sleep(0.1)
 
-    def run(self):
+    def run(self) -> None:
         """Starts the uvicorn server in the background."""
         config = uvicorn.Config(app, host=self.host, port=self.port, log_level="error")
         server = uvicorn.Server(config)
