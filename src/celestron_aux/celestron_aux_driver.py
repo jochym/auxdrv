@@ -43,7 +43,12 @@ class AUXCommands(Enum):
     MC_GET_CORDWRAP_POS = 0x3C
     MC_SET_AUTOGUIDE_RATE = 0x46
     MC_GET_AUTOGUIDE_RATE = 0x47
+    MC_GET_APPROACH = 0xFC
+    MC_SET_APPROACH = 0xFD
     GET_VER = 0xFE
+
+    # Simulation Backdoor (NOT for use with real hardware)
+    SIM_GET_SKY_POSITION = 0xFF
     GPS_GET_LAT = 0x01
     GPS_GET_LONG = 0x02
     GPS_SET_LAT = 0x31
@@ -228,19 +233,14 @@ def unpack_int3_steps(d: bytes) -> int:
     return int.from_bytes(d, "big", signed=False)
 
 
-def pack_int3_steps(val: int) -> bytes:
+def pack_int3_steps(val: float) -> bytes:
     """
-    Packs an integer into 3 big-endian bytes.
-
-    Args:
-        val (int): Integer to pack (0 to 2^24 - 1).
-
-    Returns:
-        bytes: 3 bytes of data.
+    Packs a float or integer into 3 big-endian bytes.
     """
-    if not 0 <= val < 2**24:
-        raise ValueError("Value out of range for 3-byte unsigned integer")
-    return val.to_bytes(3, "big", signed=False)
+    v = int(round(val))
+    if not 0 <= v < 2**24:
+        v = v % 16777216
+    return v.to_bytes(3, "big", signed=False)
 
 
 # Constants for encoder calculations
@@ -318,7 +318,7 @@ class AUXCommunicator:
         Returns:
             AUXCommand: The response packet, or None on failure/timeout.
         """
-        if not self.connected or not self.writer:
+        if not self.connected or not self.writer or not self.reader:
             return None
 
         async with self.lock:

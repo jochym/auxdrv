@@ -186,7 +186,7 @@ class AlignmentModel:
         )
 
     def _compute_model(self):
-        """Fits the 6-parameter model to the collected points."""
+        """Fits the adaptive geometric model to the collected points."""
         if len(self.points) == 0:
             self.matrix = np.identity(3)
             self.params = np.zeros(6)
@@ -196,21 +196,28 @@ class AlignmentModel:
         # Baseline: SVD rotation
         self._compute_svd_only()
 
-        if len(self.points) < 6:
+        # Phase 1: 1-2 points -> SVD only (already done above)
+        if len(self.points) < 3:
             return
+
+        # Phase 2: 3-5 points -> 4-parameter model (Rotation + ID)
+        # Phase 3: 6+ points -> 6-parameter model (Rotation + ID + CH + NP)
+        solve_params = 6 if len(self.points) >= 6 else 4
 
         # Refine model using Non-linear Least Squares
         def residuals(p):
+            # p might be 4 or 6 elements
+            full_p = np.zeros(6)
+            full_p[: len(p)] = p
             res = []
             for pt in self.points:
-                m_pred = self._transform_internal(pt["sky"], p)
+                m_pred = self._transform_internal(pt["sky"], full_p)
                 dot = np.dot(m_pred, pt["mount"])
                 dot = np.clip(dot, -1.0, 1.0)
                 res.append(math.acos(dot) * pt["weight"])
             return np.array(res)
 
         # Initial guess from SVD matrix
-        # Matrix to Euler (using a more robust method)
         sy = math.sqrt(
             self.matrix[0, 0] * self.matrix[0, 0]
             + self.matrix[1, 0] * self.matrix[1, 0]
@@ -225,13 +232,17 @@ class AlignmentModel:
             p = math.atan2(-self.matrix[2, 0], sy)
             y = 0
 
-        initial_p = np.array([r, p, y, 0.0, 0.0, 0.0])
+        initial_p = np.array([r, p, y, 0.0, 0.0, 0.0])[:solve_params]
 
-        # Use a robust solver with better tolerance and step size
+        # Use a robust solver
         res = least_squares(
             residuals, initial_p, method="trf", ftol=1e-12, xtol=1e-12, diff_step=1e-4
         )
-        self.params = res.x
+
+        self.params = np.zeros(6)
+        self.params[: len(res.x)] = res.x
+
+        # Update base rotation matrix from the solved Euler angles
         self.matrix = self._get_rotation_matrix(
             self.params[0], self.params[1], self.params[2]
         )
@@ -241,6 +252,8 @@ class AlignmentModel:
         """Computes optimal rotation matrix using SVD (fallback)."""
         if len(self.points) < 1:
             self.matrix = np.identity(3)
+            self.params = np.zeros(6)
+            self.rms_error_arcsec = 0.0
             return
 
         if len(self.points) == 1:
@@ -280,7 +293,7 @@ class AlignmentModel:
 
         total_sq_error = 0.0
         for p in self.points:
-            if len(self.points) < 6:
+            if len(self.points) < 3:
                 pred_mount = self.matrix @ p["sky"]
             else:
                 pred_mount = self._transform_internal(p["sky"], self.params)
@@ -295,7 +308,7 @@ class AlignmentModel:
 
     def transform_to_mount(self, sky_vec, target_vec=None, local_bias=0.0):
         """Applies transformation with optional local weighting."""
-        if len(self.points) < 6:
+        if len(self.points) < 3:
             R = self.matrix
             if target_vec is not None and local_bias > 0:
                 R = self.get_local_matrix(

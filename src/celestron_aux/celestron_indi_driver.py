@@ -32,6 +32,7 @@ import argparse
 
 try:
     from indipyserver import IPyServer
+
     HAS_SERVER = True
 except ImportError:
     HAS_SERVER = False
@@ -203,6 +204,8 @@ class CelestronAUXDriver(IPyDriver):
         self.current_alt_steps = 0
         self._tracking_task = None
         self._align_model = AlignmentModel()
+        self.current_target_ra = 0.0
+        self.current_target_dec = 0.0
 
         # 3. ephem Observer for RA/Dec <-> Alt/Az transformations
         self.observer = ephem.Observer()
@@ -791,14 +794,14 @@ class CelestronAUXDriver(IPyDriver):
         self.refraction_off.membervalue = "On"
         self.refraction_on.membervalue = "Off"
 
-    def update_observer(self, time_offset: float = 0):
+    def update_observer(self, time_offset: float = 0, base_date=None):
         """Updates ephem Observer state from INDI location properties."""
         self.observer.lat = str(self.lat.membervalue)
         self.observer.lon = str(self.long.membervalue)
         self.observer.elevation = float(self.elev.membervalue)
 
         # IMPORTANT: Use a local base time to avoid cumulative drift
-        self.observer.date = ephem.now()
+        self.observer.date = base_date or ephem.now()
         if time_offset != 0:
             self.observer.date = ephem.Date(self.observer.date + time_offset / 86400.0)
 
@@ -1249,10 +1252,16 @@ class CelestronAUXDriver(IPyDriver):
             return True
         return False
 
-    async def get_tracking_rates(self, ra, dec):
+    async def get_tracking_rates(self, ra, dec, base_date=None):
         """Calculates current tracking rates in steps/second."""
-        s1_azm, s1_alt = await self.equatorial_to_steps(ra, dec, time_offset=0)
-        s2_azm, s2_alt = await self.equatorial_to_steps(ra, dec, time_offset=60)
+        dt = 30.0
+        base_now = base_date or ephem.now()
+        s1_azm, s1_alt = await self.equatorial_to_steps(
+            ra, dec, time_offset=-dt, base_date=base_now
+        )
+        s2_azm, s2_alt = await self.equatorial_to_steps(
+            ra, dec, time_offset=dt, base_date=base_now
+        )
 
         def diff_steps(s2, s1):
             d = s2 - s1
@@ -1262,7 +1271,9 @@ class CelestronAUXDriver(IPyDriver):
                 d += STEPS_PER_REVOLUTION
             return d
 
-        return diff_steps(s2_azm, s1_azm) / 60.0, diff_steps(s2_alt, s1_alt) / 60.0
+        return diff_steps(s2_azm, s1_azm) / (2.0 * dt), diff_steps(s2_alt, s1_alt) / (
+            2.0 * dt
+        )
 
     def is_move_allowed(self, azm_steps, alt_steps):
         """Checks if the given position (in steps) is within configured limits."""
@@ -1292,7 +1303,9 @@ class CelestronAUXDriver(IPyDriver):
 
         return True
 
-    async def goto_position(self, target_azm, target_alt, ra=None, dec=None):
+    async def goto_position(
+        self, target_azm, target_alt, ra=None, dec=None, force_approach=None
+    ):
         """
         Executes a GoTo movement with optional anti-backlash approach.
         Checks against slew limits before moving.
@@ -1301,7 +1314,9 @@ class CelestronAUXDriver(IPyDriver):
             return False
 
         approach_mode = "DISABLED"
-        if self.approach_fixed.membervalue == "On":
+        if force_approach is not None:
+            approach_mode = force_approach
+        elif self.approach_fixed.membervalue == "On":
             approach_mode = "FIXED"
         elif self.approach_tracking.membervalue == "On":
             approach_mode = "TRACKING"
@@ -1459,6 +1474,11 @@ class CelestronAUXDriver(IPyDriver):
         if event is not None:
             self.equatorial_vector.update(event)
 
+        # Capture target from INDI properties for sidereal mode
+        if self.target_sidereal.membervalue == "On":
+            self.current_target_ra = float(self.ra.membervalue)
+            self.current_target_dec = float(self.dec.membervalue)
+
         target_ra, target_dec = await self._get_target_equatorial()
 
         if self.set_sync.membervalue == "On":
@@ -1513,23 +1533,36 @@ class CelestronAUXDriver(IPyDriver):
         else:
             # Perform GOTO
             await self.equatorial_vector.send_setVector(state="Busy")
-            
-            # Use iterative refinement for high precision
-            for attempt in range(2):
-                target_ra, target_dec = await self._get_target_equatorial()
-                azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
-                success = await self.goto_position(
-                    azm_steps, alt_steps, ra=target_ra, dec=target_dec
-                )
 
-                if success:
-                    await asyncio.gather(
-                        self._wait_for_slew(AUXTargets.AZM),
-                        self._wait_for_slew(AUXTargets.ALT),
-                    )
-                else:
-                    await self.equatorial_vector.send_setVector(state="Alert")
-                    return
+            # 1. First move: Fast, no anti-backlash
+            azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
+            success = await self.goto_position(
+                azm_steps, alt_steps, force_approach="DISABLED"
+            )
+            if success:
+                await asyncio.gather(
+                    self._wait_for_slew(AUXTargets.AZM),
+                    self._wait_for_slew(AUXTargets.ALT),
+                )
+            else:
+                await self.equatorial_vector.send_setVector(state="Alert")
+                return
+
+            # 2. Second move: Precision approach
+            target_ra, target_dec = await self._get_target_equatorial()
+            azm_steps, alt_steps = await self.equatorial_to_steps(target_ra, target_dec)
+            success = await self.goto_position(
+                azm_steps, alt_steps, ra=target_ra, dec=target_dec
+            )
+
+            if success:
+                await asyncio.gather(
+                    self._wait_for_slew(AUXTargets.AZM),
+                    self._wait_for_slew(AUXTargets.ALT),
+                )
+            else:
+                await self.equatorial_vector.send_setVector(state="Alert")
+                return
 
             # Immediately start tracking if Coord Set Mode is TRACK
             if self.set_track.membervalue == "On":
@@ -1542,12 +1575,12 @@ class CelestronAUXDriver(IPyDriver):
 
             await self.equatorial_vector.send_setVector(state="Ok")
 
-    async def _get_target_equatorial(self, time_offset: float = 0):
+    async def _get_target_equatorial(self, time_offset: float = 0, base_date=None):
         """Returns JNow RA/Dec for the currently selected target type."""
-        self.update_observer(time_offset)
+        self.update_observer(time_offset, base_date=base_date)
 
         if self.target_sidereal.membervalue == "On":
-            return float(self.ra.membervalue), float(self.dec.membervalue)
+            return self.current_target_ra, self.current_target_dec
 
         body = None
         if self.target_sun.membervalue == "On":
@@ -1588,9 +1621,11 @@ class CelestronAUXDriver(IPyDriver):
 
         return float(self.ra.membervalue), float(self.dec.membervalue)
 
-    async def equatorial_to_steps(self, ra_hours, dec_deg, time_offset: float = 0):
+    async def equatorial_to_steps(
+        self, ra_hours, dec_deg, time_offset: float = 0, base_date=None
+    ):
         """Converts RA/Dec to motor encoder steps."""
-        self.update_observer(time_offset=time_offset)
+        self.update_observer(time_offset=time_offset, base_date=base_date)
 
         body = ephem.FixedBody()
         body._ra = math.radians(ra_hours * 15.0)
@@ -1613,15 +1648,12 @@ class CelestronAUXDriver(IPyDriver):
         )
         real_az_deg, real_alt_deg = vector_to_altaz(mount_vec)
 
-        azm_steps = (
-            int((real_az_deg / 360.0) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
-        )
-        alt_steps = (
-            int((real_alt_deg / 360.0) * STEPS_PER_REVOLUTION) % STEPS_PER_REVOLUTION
-        )
+        azm_steps = (real_az_deg / 360.0) * STEPS_PER_REVOLUTION
+        alt_steps = (real_alt_deg / 360.0) * STEPS_PER_REVOLUTION
+
         return azm_steps, alt_steps
 
-    async def steps_to_equatorial(self, azm_steps, alt_steps):
+    async def steps_to_equatorial(self, azm_steps, alt_steps, base_date=None):
         """Converts motor encoder steps to RA/Dec."""
         real_az_deg = (azm_steps / STEPS_PER_REVOLUTION) * 360.0
         real_alt_deg = (alt_steps / STEPS_PER_REVOLUTION) * 360.0
@@ -1634,7 +1666,7 @@ class CelestronAUXDriver(IPyDriver):
         if self.refraction_on.membervalue == "On":
             ideal_alt_deg = remove_refraction(ideal_alt_deg)
 
-        self.update_observer()
+        self.update_observer(base_date=base_date)
         ra_rad, dec_rad = self.observer.radec_of(
             math.radians(ideal_az_deg), math.radians(ideal_alt_deg)
         )
@@ -1703,31 +1735,15 @@ class CelestronAUXDriver(IPyDriver):
                     await asyncio.sleep(0.2)
                     continue
 
-                dt = 1.0
-                ra_plus, dec_plus = await self._get_target_equatorial(time_offset=dt)
-                ra_minus, dec_minus = await self._get_target_equatorial(time_offset=-dt)
-
-                s_plus_azm, s_plus_alt = await self.equatorial_to_steps(
-                    ra_plus, dec_plus, time_offset=dt
+                rate_azm, rate_alt = await self.get_tracking_rates(
+                    self.current_target_ra, self.current_target_dec
                 )
-                s_minus_azm, s_minus_alt = await self.equatorial_to_steps(
-                    ra_minus, dec_minus, time_offset=-dt
-                )
-
-                def diff_steps(s2, s1):
-                    d = s2 - s1
-                    if d > STEPS_PER_REVOLUTION / 2:
-                        d -= STEPS_PER_REVOLUTION
-                    if d < -STEPS_PER_REVOLUTION / 2:
-                        d += STEPS_PER_REVOLUTION
-                    return d
-
-                rate_azm = diff_steps(s_plus_azm, s_minus_azm) / (2.0 * dt)
-                rate_alt = diff_steps(s_plus_alt, s_minus_alt) / (2.0 * dt)
 
                 factor = (360.0 * 3600.0 * 1024.0) / STEPS_PER_REVOLUTION
-                val_azm = int(abs(rate_azm) * factor)
-                val_alt = int(abs(rate_alt) * factor)
+                val_azm = int(round(abs(rate_azm) * factor))
+                val_alt = int(round(abs(rate_alt) * factor))
+
+                # print(f"TRACK: val_azm={val_azm} val_alt={val_alt}")
 
                 cmd_azm = AUXCommand(
                     AUXCommands.MC_SET_POS_GUIDERATE

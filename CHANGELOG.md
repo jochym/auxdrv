@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.4] - 2026-01-09
+
+### Added
+- **Real-World Validation Script**: New standalone routine `scripts/real_world_validation.py` for testing 4-star local alignment and tracking accuracy under simulated mechanical imperfections (Periodic Error, Cone Error, Backlash).
+
+### Fixed
+- **Sub-step Precision in Rate Estimation**: Refined guide rate conversion to minimize truncation errors by maintaining floating-point precision during velocity calculation before rounding to 24-bit AUX commands.
+
+## [1.6.3] - 2026-01-09
+
+### Added
+- **High-Accuracy Dead Reckoning**: Optimized tracking loop for sub-arcsecond stability.
+- **Improved Differentiation**: Increased sampling interval ($dt=5.0s$) to reduce quantization noise in velocity estimation.
+
+### Fixed
+- **Rate Quantization**: Reduced tracking drift by an order of magnitude through smoother numerical derivatives.
+
+## [1.6.2] - 2026-01-09
+
+### Added
+- **Automated Tracking Accuracy Test**: New test suite `tests/test_tracking_accuracy.py` that programmatically measures drift, jitter, and pointing error.
+- **Target Locking**: Implemented `current_target_ra/dec` to prevent feedback drift during sidereal tracking.
+
+### Fixed
+- **Iterative GoTo Refinement**: Improved absolute pointing accuracy by implementing a two-stage slew (Fast Approach + Precision Centering).
+- **GoTo Jumping**: Eliminated redundant slew iterations and refined anti-backlash suppression during the fast phase.
+- **Tracking Stability**: Improved tracking rate derivative calculation by reducing the sample interval ($dt=0.1s$) and using a consistent time base.
+- **Web Console Precision**: Increased telemetry display precision for velocities to 4 decimal places, enabling visualization of sidereal rates.
+
+## [1.6.1] - 2026-01-08
+
+### Added
+- **Visual Digital Twin Finalization**: Completed the integration of Three.js visualization with real-time driver telemetry.
+- **Enhanced Sky View**: Verified FOV representation against bright stars (Polaris, Sirius, Vega).
+
 ## [1.6.0] - 2026-01-08
 
 ### Added

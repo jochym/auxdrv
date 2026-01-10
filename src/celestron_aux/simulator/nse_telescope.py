@@ -63,6 +63,7 @@ commands = {
     "MC_GET_AUTOGUIDE_RATE": 0x47,
     "MC_GET_APPROACH": 0xFC,
     "MC_SET_APPROACH": 0xFD,
+    "SIM_GET_SKY_POSITION": 0xFF,
     "GET_VER": 0xFE,
 }
 cmd_names = {value: key for key, value in commands.items()}
@@ -200,8 +201,8 @@ class NexStarScope:
         self.goto = False
         self.alt_guiderate = 0.0
         self.azm_guiderate = 0.0
-        self.alt_maxrate = 4000  # 4.0 deg/s (Evolution)
-        self.azm_maxrate = 4000
+        self.alt_maxrate = 10000  # 10.0 deg/s
+        self.azm_maxrate = 10000
         self.use_maxrate = False
 
         self.cmd_log = deque(maxlen=30)
@@ -251,6 +252,7 @@ class NexStarScope:
             0x3C: self.get_cordwrap_pos,
             0xFC: self.get_approach,
             0xFD: self.set_approach,
+            0xFF: self.get_sky_position_aux,
             0xFE: self.fw_version,
         }
         self._focuser_handlers = {
@@ -449,7 +451,7 @@ class NexStarScope:
         self.last_cmd = "GOTO_SLOW"
         self.slewing = self.goto = True
         self.guiding = False
-        r = 0.1 / 360  # 0.1 deg/s (Very slow precision approach)
+        r = 0.5 / 360  # 0.5 deg/s (Precision approach)
         a = unpack_int3(data)
 
         if rcv == 0x11:
@@ -613,6 +615,12 @@ class NexStarScope:
         else:
             self.azm_approach = data[0]
         return b""
+
+    def get_sky_position_aux(self, data, snd, rcv):
+        """Returns the actual sky position (with imperfections) as 3-byte fraction."""
+        sky_azm, sky_alt = self.get_sky_altaz()
+        pos = sky_alt if rcv == 0x11 else sky_azm
+        return pack_int3(pos)
 
     def fw_version(self, data, snd, rcv):
         """Returns firmware version bytes for the target device."""
