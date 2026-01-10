@@ -6,9 +6,12 @@ import numpy as np
 import time
 import argparse
 import sys
+import os
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+# Add src to path
+base_dir = Path(__file__).parent.parent
+sys.path.append(str(base_dir / "src"))
 
 from celestron_aux.celestron_indi_driver import CelestronAUXDriver, STEPS_PER_REVOLUTION
 from celestron_aux.celestron_aux_driver import (
@@ -61,20 +64,12 @@ class AlignmentAnalyzer:
         return (ra_rad / (2 * math.pi)) * 24.0, (dec_rad / (2 * math.pi)) * 360.0
 
     async def perform_sync(self, ra, dec):
-        # We simulate centering the star.
-        # To do this correctly in simulation analysis:
-        # 1. We know the star is at (ra, dec).
-        # 2. We ask the mount where it is PHYSICALLY (encoders).
-        # 3. We ask the mount where it is LOOKING (truth).
-        # 4. We map the physical encoders to the sky (ra, dec).
-
         await self.driver.read_mount_position()
         raw_az_deg = (self.driver.current_azm_steps / 16777216.0) * 360.0
         raw_alt_deg = (self.driver.current_alt_steps / 16777216.0) * 360.0
         if raw_alt_deg > 180:
             raw_alt_deg -= 360.0
 
-        # Truth backdoor
         resp_az = await self.driver.communicator.send_command(
             AUXCommand(AUXCommands.SIM_GET_SKY_POSITION, AUXTargets.APP, AUXTargets.AZM)
         )
@@ -95,11 +90,11 @@ class AlignmentAnalyzer:
         await self.driver.update_alignment_status()
 
     async def wait_for_idle(self):
-        for _ in range(60):
+        for _ in range(40):
             await self.driver.read_mount_position()
             if self.driver.slewing_light.membervalue == "Idle":
                 return True
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
         return False
 
     async def check_accuracy(self, ra, dec):
@@ -131,12 +126,11 @@ class AlignmentAnalyzer:
         print(f"{'Points':<10} | {'Local Err':<12} | {'Global Err':<12} | {'RMS':<10}")
         print("-" * 55)
 
-        # Scenarios: 1, 2, 3, 6, 12
-        point_counts = [1, 2, 3, 6, 12]
+        # Scenarios: 1, 2, 3, 6
+        point_counts = [1, 2, 3, 6]
 
-        # Pre-generate points
         all_stars = []
-        for i in range(15):
+        for i in range(10):
             # Spiral outward
             r = 5.0 + i * 3.0
             angle = i * 137.5
