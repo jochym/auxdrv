@@ -1,5 +1,10 @@
 # Celestron AUX INDI Driver (Python)
 
+![CI](https://github.com/jochym/auxdrv/actions/workflows/ci.yml/badge.svg)
+![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
+![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)
+![INDI](https://img.shields.io/badge/INDI-compatible-orange)
+
 A modern INDI driver for Celestron mounts using the AUX protocol, with a built-in simulator for testing.
 
 ## Project Architecture
@@ -10,8 +15,8 @@ A modern INDI driver for Celestron mounts using the AUX protocol, with a built-i
 
 ## Requirements
 
-*   Python 3.8+
-*   `indipydriver >= 3.0.0`
+*   Python 3.11+
+*   `indipydriver >= 3.0.4`
 *   `pyserial-asyncio`
 *   `ephem`
 *   `pyyaml`
