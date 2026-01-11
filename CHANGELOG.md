@@ -2,14 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.6.5] - 2026-01-09
+## [1.6.5] - 2026-01-10
 
 ### Added
+- **Type Hints**: Added comprehensive type annotations to all core modules and simulator components for better maintainability and robustness.
+- **GitHub Actions CI**: Set up a professional CI pipeline verifying tests and type correctness on Python 3.11, 3.12, and 3.13.
 - **Adaptive Alignment Model**: The mathematical model now scales with the number of alignment points (SVD for 1-2 pts, 4-parameter for 3-5 pts, 6-parameter for 6+ pts).
 - **Sub-step Rate Estimation**: Maintains floating-point precision during velocity calculation to eliminate quantization drift.
 - **Simulation Backdoor**: Added `SIM_GET_SKY_POSITION` (0xFF) for ground-truth verification in simulation.
 
 ### Fixed
+- **Non-Sidereal Tracking**: Fixed a bug where Moon and Planet tracking used stale target coordinates. The loop now correctly re-calculates target positions at each tick.
+- **Iterative GoTo**: Corrected the two-stage slew implementation (Fast + Precision) and fixed coordinate synchronization during Sync operations.
+- **CI Compatibility**: Removed hardcoded `venv` references in test suites, enabling execution in containerized environments.
+- **Driver Robustness**: Fixed property inheritance and added safety checks for hardware communicator connection state.
 - **Tracking Stability**: Switched to a 30s differentiation window, matching the reference driver's high-inertia approach.
 - **Documentation**: Updated `DEVELOPMENT_PLAN.md` and `GEMINI.md` to reflect the latest project status.
 
