@@ -1,9 +1,11 @@
 # Celestron AUX INDI Driver (Python)
 
-![CI](https://github.com/jochym/auxdrv/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/jochym/auxdrv/actions/workflows/ci.yml/badge.svg)](https://github.com/jochym/auxdrv/actions/workflows/ci.yml)
 ![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)
 ![INDI](https://img.shields.io/badge/INDI-compatible-orange)
+![Version](https://img.shields.io/badge/version-1.6.5-blue)
+[![Documentation](https://img.shields.io/badge/docs-User%20Manual-brightgreen)](docs/USER_MANUAL.md)
 
 A modern INDI driver for Celestron mounts using the AUX protocol, with a built-in simulator for testing.
 
