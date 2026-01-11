@@ -67,6 +67,11 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         self.driver = CelestronAUXDriver()
         self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
 
+        # Set to Equator for reachability
+        self.driver.lat.membervalue = 0.0
+        self.driver.long.membervalue = 0.0
+        self.driver.update_observer()
+
         async def mock_send(xmldata):
             pass
 
@@ -127,48 +132,47 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         self.driver.update_observer()
         moon = ephem.Moon()
 
-        # Try finding a time today when moon is up
+        # Try finding a time today when moon is up (Alt > 30)
         start_date = ephem.now()
+        fixed_date = start_date
         for h in range(24):
             self.driver.observer.date = ephem.Date(start_date + h / 24.0)
             moon.compute(self.driver.observer)
             if math.degrees(moon.alt) > 30:
+                fixed_date = self.driver.observer.date
                 break
 
-        # Lock this time for the whole test
-        fixed_date = self.driver.observer.date
-
-        # 3. Get Moon JNow coords at this specific time
-        ra_moon, dec_moon = await self.driver._get_target_equatorial(
-            base_date=fixed_date
-        )
-
-        # 4. Trigger GoTo
-        # We need to make sure handle_equatorial_goto uses our fixed time
+        # If not found, just use current time and pray it's above horizon
+        self.driver.observer.date = fixed_date
         original_now = ephem.now
         ephem.now = lambda: fixed_date
+
         try:
+            # 3. Get Moon JNow coords at this specific time
+            ra_moon, dec_moon = await self.driver._get_target_equatorial(
+                base_date=fixed_date
+            )
+
+            # 4. Trigger GoTo
             await self.driver.handle_equatorial_goto(None)
+
+            # 5. Wait for idle
+            for _ in range(60):
+                await self.driver.read_mount_position()
+                if self.driver.slewing_light.membervalue == "Idle":
+                    break
+                await asyncio.sleep(1)
+
+            # 6. Verify position
+            await self.driver.read_mount_position()
+            ra = float(self.driver.ra.membervalue)
+            dec = float(self.driver.dec.membervalue)
+
+            # Increased delta to 2.0 now that time is locked
+            self.assertAlmostEqual(ra, ra_moon, delta=2.0)
+            self.assertAlmostEqual(dec, dec_moon, delta=2.0)
         finally:
             ephem.now = original_now
-
-        # 5. Wait for idle
-        # Inline wait loop
-        for _ in range(60):
-            await self.driver.read_mount_position()
-            if self.driver.slewing_light.membervalue == "Idle":
-                break
-            await asyncio.sleep(1)
-
-        # 6. Verify position
-        await self.driver.read_mount_position()
-        ra = float(self.driver.ra.membervalue)
-        dec = float(self.driver.dec.membervalue)
-
-        # Increased delta to 25.0 to account for realistic simulator imperfections
-        # (Refraction, Cone Error, Jitter) and extremely high moon speed
-        self.assertAlmostEqual(ra, ra_moon, delta=25.0)
-        self.assertAlmostEqual(dec, dec_moon, delta=25.0)
 
     async def test_moon_tracking_rate(self):
         """
