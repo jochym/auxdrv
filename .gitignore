@@ -9,6 +9,7 @@ simulator/*.log
 .indipydriver.xml
 dist/
 build/
+_build/
 *.egg-info/
 venv/
 .opencode_state.json

@@ -38,6 +38,12 @@ dev = [
     "mypy",
     "types-PyYAML",
 ]
+docs = [
+    "sphinx>=7.0",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+]
 
 [project.scripts]
 indi-celestron-aux = "celestron_aux.celestron_indi_driver:main"
