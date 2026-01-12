@@ -17,6 +17,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
     "myst_parser",
     "sphinx_copybutton",
 ]
@@ -40,4 +41,6 @@ intersphinx_mapping = {
 myst_enable_extensions = [
     "colon_fence",
     "deflist",
+    "dollarmath",
+    "amsmath",
 ]
