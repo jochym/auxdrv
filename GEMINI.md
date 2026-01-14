@@ -24,20 +24,11 @@ The driver has achieved high functional parity with reference implementations an
 
 ## Development Roadmap
 
-### Phase 17: Advanced Features (Planned)
-*   Periodic Error Correction (PEC).
-*   Hibernation mode.
-*   Internal INDI Server refinement.
-
-*   ✅ **Packaging:** PyPI-ready structure with `src` layout and `pyproject.toml`.
-
----
-
-## Development Roadmap
-
-### Phase 12: Periodic Error Correction (Planned)
-*   Implementation of software and hardware-interfaced PEC.
-*   Persistent storage of calibration data.
+### Phase 17: Hardware Validation & Advanced Features (Current/Next)
+*   [ ] **Hardware Interaction Test (HIT)**: Physical verification of axis polarity and safety on real mounts.
+*   [ ] **PEC (Periodic Error Correction)**: Recording, playback, and software correction of mechanical PE.
+*   [ ] **Alignment Hibernation**: Persistent storage of sync points and alignment state to JSON/Persistent memory.
+*   [ ] **Internal INDI Server**: Further refinement of the standalone `indipyserver` integration.
 
 ---
 

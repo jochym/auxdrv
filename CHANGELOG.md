@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.6.5] - 2026-01-10
+## [1.6.5] - 2026-01-12
 
 ### Added
 - **Type Hints**: Added comprehensive type annotations to all core modules and simulator components for better maintainability and robustness.
@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 - **CI Compatibility**: Removed hardcoded `venv` references in test suites, enabling execution in containerized environments.
 - **Driver Robustness**: Fixed property inheritance and added safety checks for hardware communicator connection state.
 - **Tracking Stability**: Switched to a 30s differentiation window, matching the reference driver's high-inertia approach.
-- **Documentation**: Updated `DEVELOPMENT_PLAN.md` and `GEMINI.md` to reflect the latest project status.
+- **Documentation**: Updated `DEVELOPMENT_PLAN.md` and `GEMINI.md` to reflect the latest project status. Added MathJax and MyST dollarmath extensions for professional LaTeX rendering.
 
 ## [1.6.4] - 2026-01-09
 
