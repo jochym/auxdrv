@@ -1,40 +1,60 @@
 # Project Status: INDI Celestron AUX Driver (Python)
 
-**Current Version:** v1.6.5
-**Last Updated:** 2026-01-13
-**Status:** Feature Complete (Virtual) / Ready for Hardware Validation
+**Current Version:** v1.6.5  
+**Last Updated:** 2026-01-19  
+**Status:** Feature Complete (Virtual) / Transitioning to Hardware Validation
 
-## Summary of Achievements
-*   **Tracking Engine:** High-inertia dead reckoning ($dt=30s$) with sub-step floating-point precision. Achieved sub-arcsecond stability in simulation.
-*   **Alignment System:** Adaptive mathematical model scaling from SVD Rotation (1-2 pts) to Full 6-parameter geometric correction (6+ pts).
-*   **Digital Twin:** Integrated 3D Web Console (Three.js) for collision detection and visual motion verification.
-*   **Quality Assurance:** 41 automated tests passing. CI/CD pipeline active on GitHub (Python 3.11-3.13). Comprehensive type hinting.
-*   **Documentation:** Professional Sphinx/Furo documentation with LaTeX math support.
+---
 
-## Key Files & Directories
-*   `src/celestron_aux/`: Core driver logic.
-*   `tests/`: Comprehensive test suite (41 tests).
-*   `scripts/`: Validation tools (`hit_validation.py`, `pec_measure.py`).
-*   `docs/`: Source files for documentation.
+## 🎯 Current Session Focus
+Transition the project from **Virtual Validation** (Simulator-based) to **Physical Hardware Integration** and implement Phase 17 (Advanced Features).
+- [ ] **Alignment Hibernation**: Implement persistent storage of sync points.
+- [ ] **Software PEC**: Implement tracking rate corrections based on measured PE.
 
-## Next Steps (Hardware Phase)
-1.  **HIT (Hardware Interaction Test):** Run `scripts/hit_validation.py` on physical hardware to verify axis polarity and emergency stop response.
-2.  **PEC Profiling:** Use `scripts/pec_measure.py` with a real sensor/ASTAP to measure native periodic error.
-3.  **Phase 17 (Hibernation & Software PEC):** 
-    *   Implement `Alignment Hibernation` (JSON persistence).
-    *   Implement `Software PEC` (applying measured profile to tracking rates).
+---
 
-## Resuming the Session
-To resume, start the simulator and run the functional tests to verify the baseline:
-```bash
-# Terminal 1: Simulator
-source venv/bin/activate
-export PYTHONPATH=$PYTHONPATH:$(pwd)/src
-python src/celestron_aux/simulator/nse_simulator.py
+## 🚀 Achievements & Milestones
+*   **Tracking Engine**: High-inertia dead reckoning ($dt=30s$) with sub-step floating-point precision. Achieved sub-arcsecond stability in simulation.
+*   **Alignment System**: Adaptive mathematical model scaling from SVD Rotation (1-2 pts) to Full 6-parameter geometric correction (6+ pts).
+*   **Digital Twin**: Integrated 3D Web Console (Three.js) for collision detection and visual motion verification.
+*   **Quality Assurance**: 41 automated tests passing. CI/CD pipeline active on GitHub.
+*   **Hardware Ready**: Dynamic mount detection (`MC_GET_MODEL`), RTC management, and battery telemetry implemented.
 
-# Terminal 2: Tests
-source venv/bin/activate
-export PYTHONPATH=$PYTHONPATH:$(pwd)/src
-pytest
-```
-Then proceed to hardware validation via the `scripts/` directory.
+---
+
+## 🗺 Detailed Roadmap (Functional Parity)
+
+### 1. Driver Logic & Configuration
+- [x] **Dynamic Mount Detection**: Automatically set mount type (Alt-Az/EQ) based on hardware response.
+- [x] **Time Management (RTC)**: Write system time to mount RTC on connection.
+- [x] **Site Management**: Read/Write Latitude/Longitude to hardware.
+
+### 2. INDI Standard Compliance
+- [x] **Properties Audit**: 1:1 parity with `indi_celestron_gps`.
+- [x] **Standard Slew Rates**: Unified Guide/Centering/Find/Max mapping.
+
+### 3. Auxiliary Functions & Peripherals
+- [x] **Power Management**: Battery voltage and current telemetry (Evolution series).
+- [x] **GPS & WiFi Status**: Extended status (satellites, signal strength).
+- [ ] **Lighting & Outputs**: Backlight and 12V output control (Future Phase).
+
+### 4. Phase 17: Hardware Phase & Advanced Features (Current)
+- [ ] **HIT (Hardware Interaction Test)**: Physical verification of axis polarity.
+- [ ] **PEC Measurement**: Record PE profile using `scripts/pec_measure.py`.
+- [ ] **Alignment Hibernation**: Save/Load sync points to JSON.
+- [ ] **Software PEC**: Apply measured profile to tracking rates.
+
+---
+
+## 🛠 Hardware Validation Protocol
+Before first hardware slew:
+1. **Safety Check**: Verify `TELESCOPE_ABORT_MOTION` stops both axes immediately.
+2. **Axis Polarity**: Run `scripts/hit_validation.py` and confirm physical motion matches commands.
+3. **Software Limits**: Ensure `TELESCOPE_LIMITS` are active and blocking slews below horizon/into pier.
+
+---
+
+## 📂 Key Resources
+- `AGENTS.md`: Technical instructions for build, test, and code style.
+- `docs/USER_MANUAL.md`: Installation and basic operation.
+- `scripts/`: Hardware validation tools.
