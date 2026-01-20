@@ -13,12 +13,16 @@ References:
 import struct
 import time
 import asyncio
+import logging
 import serial_asyncio
 from enum import Enum
 from typing import Optional, Union, List, Tuple, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from asyncio import StreamReader, StreamWriter
+
+
+logger = logging.getLogger(__name__)
 
 
 class AUXCommands(Enum):
@@ -162,7 +166,7 @@ class AUXCommand:
         calculated_checksum = cls._calculate_checksum(buf[1:-1])
         if calculated_checksum != checksum:
             # We log but continue, as some mounts have flaky checksums
-            print(
+            logger.error(
                 f"Checksum error: Expected {calculated_checksum:02X}, Got {checksum:02X} for buffer {buf.hex()}"
             )
 
@@ -294,10 +298,12 @@ class AUXCommunicator:
                     url=self.port, baudrate=self.baudrate
                 )
             self.connected = True
-            print(f"Communicator: Connected to {self.port} at {self.baudrate} baud.")
+            logger.info(
+                f"Communicator: Connected to {self.port} at {self.baudrate} baud."
+            )
             return True
         except Exception as e:
-            print(f"Communicator: Error connecting: {e}")
+            logger.error(f"Communicator: Error connecting: {e}")
             self.connected = False
             return False
 
@@ -307,7 +313,7 @@ class AUXCommunicator:
             self.writer.close()
             await self.writer.wait_closed()
             self.connected = False
-            print(f"Communicator: Disconnected from {self.port}")
+            logger.info(f"Communicator: Disconnected from {self.port}")
 
     async def send_command(self, command: AUXCommand) -> Optional[AUXCommand]:
         """
@@ -363,5 +369,7 @@ class AUXCommunicator:
                         continue
                     return resp
             except Exception as e:
-                print(f"Communicator: Error in send_command: {type(e).__name__}: {e}")
+                logger.error(
+                    f"Communicator: Error in send_command: {type(e).__name__}: {e}"
+                )
                 return None

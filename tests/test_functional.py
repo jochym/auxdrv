@@ -329,10 +329,10 @@ class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
             - The final reported RA and Dec must match the target within 0.5 degrees
               (accounting for time drift and transformation rounding).
         """
-        import yaml
+        import tomllib
 
-        with open("src/celestron_aux/config.yaml", "r") as f:
-            cfg = yaml.safe_load(f).get("observer", {})
+        with open("src/celestron_aux/config.default.toml", "rb") as f:
+            cfg = tomllib.load(f).get("observer", {})
 
         self.driver.lat.membervalue = cfg.get("latitude", 50.1822)
         self.driver.long.membervalue = cfg.get("longitude", 19.7925)

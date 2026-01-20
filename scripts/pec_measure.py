@@ -10,6 +10,7 @@ Procedure:
 4. Analyze the drift and periodic oscillations.
 """
 
+import sys
 import asyncio
 import math
 import os
@@ -17,7 +18,7 @@ import subprocess
 import time
 import re
 import argparse
-import yaml
+import tomllib
 import numpy as np
 from datetime import datetime
 from pathlib import Path
@@ -26,11 +27,43 @@ from pathlib import Path
 GET_PROPS = '<getProperties version="1.7" />\n'
 
 
-def load_config(config_path):
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    return {}
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merges two dictionaries."""
+    for key, value in override.items():
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def load_config(config_path=None):
+    config = {}
+    # 1. Load config.default.toml
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_dir = os.path.join(base_dir, "src", "celestron_aux")
+    default_path = os.path.join(config_dir, "config.default.toml")
+
+    if os.path.exists(default_path):
+        with open(default_path, "rb") as f:
+            config = tomllib.load(f)
+
+    # 2. Load config.toml if it exists in the same dir
+    user_path = os.path.join(config_dir, "config.toml")
+    if os.path.exists(user_path):
+        with open(user_path, "rb") as f:
+            deep_merge(config, tomllib.load(f))
+
+    # 3. Load --config if provided and different from above
+    if config_path and os.path.exists(config_path):
+        abs_config = os.path.abspath(config_path)
+        if abs_config != os.path.abspath(
+            default_path
+        ) and abs_config != os.path.abspath(user_path):
+            with open(config_path, "rb") as f:
+                deep_merge(config, tomllib.load(f))
+
+    return config
 
 
 class PECMeasurement:
@@ -208,28 +241,45 @@ class PECMeasurement:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Measure Periodic Error using ASTAP")
-    parser.add_argument("--host", default="localhost", help="INDI host")
-    parser.add_argument("--port", type=int, default=7624, help="INDI port")
-    parser.add_argument("--mount", default="Celestron AUX", help="Mount device name")
-    parser.add_argument("--camera", default="CCD Simulator", help="Camera device name")
-    parser.add_argument("--duration", type=int, default=20, help="Duration in minutes")
-    parser.add_argument("--interval", type=int, default=30, help="Interval in seconds")
-    parser.add_argument(
-        "--exposure", type=float, default=2.0, help="Exposure time in seconds"
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    default_config_path = os.path.join(
+        base_dir, "src", "celestron_aux", "config.default.toml"
     )
+
+    parser = argparse.ArgumentParser(description="Measure Periodic Error using ASTAP")
+    parser.add_argument(
+        "--config", default=default_config_path, help="Path to config.toml"
+    )
+    parser.add_argument("--host", help="INDI host")
+    parser.add_argument("--port", type=int, help="INDI port")
+    parser.add_argument("--mount", help="Mount device name")
+    parser.add_argument("--camera", help="Camera device name")
+    parser.add_argument("--duration", type=int, help="Duration in minutes")
+    parser.add_argument("--interval", type=int, help="Interval in seconds")
+    parser.add_argument("--exposure", type=float, help="Exposure time in seconds")
 
     args = parser.parse_args()
 
+    full_config = load_config(args.config)
+    pec_config = full_config.get("validation_pec", {})
+
+    host = args.host or pec_config.get("host", "localhost")
+    port = args.port or pec_config.get("port", 7624)
+    mount = args.mount or pec_config.get("mount_device", "Celestron AUX")
+    camera = args.camera or pec_config.get("camera_device", "CCD Simulator")
+    duration = args.duration or pec_config.get("duration", 20)
+    interval = args.interval or pec_config.get("interval", 30)
+    exposure = args.exposure or pec_config.get("exposure", 2.0)
+
     meas = PECMeasurement(
-        host=args.host, port=args.port, mount=args.mount, camera=args.camera
+        host=host, port=port, mount=mount, camera=camera, config=pec_config
     )
     try:
         asyncio.run(
             meas.run(
-                duration_min=args.duration,
-                interval_sec=args.interval,
-                exposure=args.exposure,
+                duration_min=duration,
+                interval_sec=interval,
+                exposure=exposure,
             )
         )
     except KeyboardInterrupt:

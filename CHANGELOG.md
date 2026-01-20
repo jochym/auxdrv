@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-01-20
+
+### Changed
+- **Configuration Format**: Migrated from YAML (`config.yaml`) to TOML (`config.default.toml`, `config.toml`). This utilizes the standard library `tomllib` in Python 3.11+, reducing external dependencies.
+- **Logging System**: Replaced all `print()` statements with the standard `logging` module. Logs are now properly routed to `stderr` with appropriate levels (INFO, ERROR, DEBUG), ensuring compliance with INDI protocol requirements.
+- **Import Structure**: Cleaned up internal imports in `celestron_indi_driver.py` and other modules, removing defensive `try...except` blocks in favor of standard relative imports.
+- **Script Updates**: Updated all validation scripts (`hit_validation.py`, `ppt_accuracy.py`, `pec_measure.py`) to support the new TOML configuration and hierarchical loading.
+
+### Fixed
+- **Test Stability**: Resolved import errors in the test suite caused by circular or incorrect relative imports.
+- **Dependency Bloat**: Removed `pyyaml` and `types-PyYAML` from project dependencies.
+
 ## [1.6.5] - 2026-01-12
 
 ### Added

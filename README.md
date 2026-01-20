@@ -21,7 +21,6 @@ A modern INDI driver for Celestron mounts using the AUX protocol, with a built-i
 *   `indipydriver >= 3.0.4`
 *   `pyserial-asyncio`
 *   `ephem`
-*   `pyyaml`
 *   `textual`
 *   `rich`
 *   `numpy`
@@ -29,7 +28,7 @@ A modern INDI driver for Celestron mounts using the AUX protocol, with a built-i
 
 Installation of dependencies:
 ```bash
-pip install indipydriver pyserial-asyncio ephem pyyaml textual rich numpy scipy
+pip install indipydriver pyserial-asyncio ephem textual rich numpy scipy
 ```
 
 ## Running
@@ -71,11 +70,15 @@ The simulator provides a server compatible with the Stellarium protocol on port 
 
 ## Configuration
 
-The driver, simulator, and validation scripts are all configured via **`config.yaml`**. This file is organized into clean sections:
+The driver, simulator, and validation scripts are all configured via **`config.toml`**. This file is organized into clean sections:
 - `observer`: Location and elevation.
 - `driver`: Serial port and baud rate for the mount.
 - `simulator`: Ports and mechanical imperfections for simulation.
 - `validation_hit`: Parameters for hardware interaction testing.
 - `validation_ppt`: Parameters for pointing accuracy testing.
+- `validation_pec`: Parameters for periodic error measurement.
 
-Some parameters can also be overridden via environment variables (e.g., `PORT`, `BAUD`) or CLI arguments.
+The system uses a hierarchical configuration:
+1.  **`config.default.toml`**: Built-in defaults (always loaded).
+2.  **`config.toml`**: User overrides (if present).
+3.  **CLI Arguments**: Specific overrides for scripts.

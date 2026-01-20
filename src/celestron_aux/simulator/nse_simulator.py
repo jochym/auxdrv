@@ -4,7 +4,8 @@ NexStar AUX Simulator with Textual TUI and Web 3D Console.
 
 import asyncio
 import argparse
-import yaml
+import tomllib
+import logging
 import os
 import socket
 from datetime import datetime, timezone
@@ -19,27 +20,49 @@ try:
 except ImportError:
     from nse_telescope import NexStarScope, repr_angle, trg_names, cmd_names  # type: ignore
 
+logger = logging.getLogger("simulator")
+
 # Load configuration
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
-DEFAULT_CONFIG = {
-    "observer": {"latitude": 50.1822, "longitude": 19.7925, "elevation": 400}
-}
+
+
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merges two dictionaries."""
+    for key, value in override.items():
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
 
 
 def load_config():
-    """Loads simulator and observer settings from config.yaml."""
-    if os.path.exists(CONFIG_PATH):
+    """Loads configuration from TOML files with deep merge."""
+    config: dict[str, Any] = {}
+    # Load defaults
+    default_path = os.path.join(BASE_DIR, "config.default.toml")
+    if os.path.exists(default_path):
         try:
-            with open(CONFIG_PATH, "r") as f:
-                return yaml.safe_load(f)
+            with open(default_path, "rb") as f:
+                config = tomllib.load(f)
         except Exception as e:
-            print(f"Error loading config: {e}")
-    return DEFAULT_CONFIG
+            logger.error(f"Error loading default config: {e}")
+
+    # Load user override
+    user_path = os.path.join(BASE_DIR, "config.toml")
+    if os.path.exists(user_path):
+        try:
+            with open(user_path, "rb") as f:
+                user_config = tomllib.load(f)
+                deep_merge(config, user_config)
+        except Exception as e:
+            logger.error(f"Error loading user config: {e}")
+
+    return config
 
 
 config = load_config()
-obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
+obs_cfg = config.get("observer", {})
 
 telescope: Optional[NexStarScope] = None
 connections: List[Any] = []
@@ -285,8 +308,10 @@ async def main_async():
                 web = WebConsole(telescope, obs, host=args.web_host, port=args.web_port)
                 web.run()
             except ImportError:
-                print("Error: Web dependencies (fastapi, uvicorn) not installed.")
-                print("Run: pip install .[web]")
+                logger.error(
+                    "Error: Web dependencies (fastapi, uvicorn) not installed."
+                )
+                logger.info("Run: pip install .[web]")
 
     scope_server = await asyncio.start_server(handle_port2000, host="", port=args.port)
 
@@ -296,7 +321,7 @@ async def main_async():
     )
 
     if args.text:
-        print(f"Simulator running in headless mode on port {args.port}")
+        logger.info(f"Simulator running in headless mode on port {args.port}")
         try:
             while True:
                 await asyncio.sleep(1.0)
@@ -315,8 +340,8 @@ async def main_async():
                 app = SimulatorApp(telescope, obs, args, obs_cfg)
                 await app.run_async()
             except ImportError:
-                print("Error: Textual TUI not installed.")
-                print("Run: pip install .[simulator]")
+                logger.error("Error: Textual TUI not installed.")
+                logger.info("Run: pip install .[simulator]")
                 # Fallback to waiting
                 while True:
                     await asyncio.sleep(1.0)
@@ -333,4 +358,5 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     main()

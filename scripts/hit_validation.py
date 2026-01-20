@@ -4,18 +4,50 @@ import os
 import termios
 import tty
 import argparse
-import yaml
+import tomllib
 from datetime import datetime
 
 # Simple INDI XML templates
 GET_PROPS = '<getProperties version="1.7" />\n'
 
 
-def load_config(config_path):
-    if os.path.exists(config_path):
-        with open(config_path, "r") as f:
-            return yaml.safe_load(f)
-    return {}
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merges two dictionaries."""
+    for key, value in override.items():
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def load_config(config_path=None):
+    config = {}
+    # 1. Load config.default.toml
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_dir = os.path.join(base_dir, "src", "celestron_aux")
+    default_path = os.path.join(config_dir, "config.default.toml")
+
+    if os.path.exists(default_path):
+        with open(default_path, "rb") as f:
+            config = tomllib.load(f)
+
+    # 2. Load config.toml if it exists in the same dir
+    user_path = os.path.join(config_dir, "config.toml")
+    if os.path.exists(user_path):
+        with open(user_path, "rb") as f:
+            deep_merge(config, tomllib.load(f))
+
+    # 3. Load --config if provided and different from above
+    if config_path and os.path.exists(config_path):
+        abs_config = os.path.abspath(config_path)
+        if abs_config != os.path.abspath(
+            default_path
+        ) and abs_config != os.path.abspath(user_path):
+            with open(config_path, "rb") as f:
+                deep_merge(config, tomllib.load(f))
+
+    return config
 
 
 class HITValidation:
@@ -216,11 +248,13 @@ class HITValidation:
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    default_config_path = os.path.join(base_dir, "src", "celestron_aux", "config.yaml")
+    default_config_path = os.path.join(
+        base_dir, "src", "celestron_aux", "config.default.toml"
+    )
 
     parser = argparse.ArgumentParser(description="HIT Validation Script")
     parser.add_argument(
-        "--config", default=default_config_path, help="Path to config.yaml"
+        "--config", default=default_config_path, help="Path to config.toml"
     )
     parser.add_argument("--host", help="INDI server host")
     parser.add_argument("--port", type=int, help="INDI server port")

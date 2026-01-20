@@ -5,7 +5,7 @@ This module implements an INDI driver for Celestron mounts using the AUX protoco
 It uses the indipydriver library for INDI communication and ephem for
 astronomical calculations.
 
-Configuration is loaded from config.yaml.
+Configuration is loaded from config.default.toml and config.toml.
 """
 
 from __future__ import annotations
@@ -26,7 +26,8 @@ from indipydriver import (
 )
 import ephem
 from datetime import datetime, timezone
-import yaml
+import tomllib
+import logging
 import os
 import math
 import numpy as np
@@ -42,63 +43,66 @@ try:
 except ImportError:
     HAS_SERVER = False
 
-# Import AUX protocol implementation
-try:
-    from .celestron_aux_driver import (
-        AUXCommands,
-        AUXTargets,
-        AUXCommand,
-        AUXCommunicator,
-        pack_int3_steps,
-        unpack_int3_steps,
-        STEPS_PER_REVOLUTION,
-    )
-    from .alignment import (
-        AlignmentModel,
-        vector_from_radec,
-        vector_from_altaz,
-        vector_to_radec,
-        vector_to_altaz,
-    )
-except ImportError:
-    from celestron_aux_driver import (  # type: ignore
-        AUXCommands,
-        AUXTargets,
-        AUXCommand,
-        AUXCommunicator,
-        pack_int3_steps,
-        unpack_int3_steps,
-        STEPS_PER_REVOLUTION,
-    )
-    from alignment import (  # type: ignore
-        AlignmentModel,
-        vector_from_radec,
-        vector_from_altaz,
-        vector_to_radec,
-        vector_to_altaz,
-    )
+from .celestron_aux_driver import (
+    AUXCommands,
+    AUXTargets,
+    AUXCommand,
+    AUXCommunicator,
+    pack_int3_steps,
+    unpack_int3_steps,
+    STEPS_PER_REVOLUTION,
+)
+from .alignment import (
+    AlignmentModel,
+    vector_from_radec,
+    vector_from_altaz,
+    vector_to_radec,
+    vector_to_altaz,
+)
+
+logger = logging.getLogger(__name__)
 
 # Load configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
-DEFAULT_CONFIG = {
-    "observer": {"latitude": 50.1822, "longitude": 19.7925, "elevation": 400}
-}
+
+
+def deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merges two dictionaries."""
+    for key, value in override.items():
+        if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
 
 
 def load_config():
-    """Loads configuration from YAML file or returns defaults."""
-    if os.path.exists(CONFIG_PATH):
+    """Loads configuration from TOML files with deep merge."""
+    config: dict[str, Any] = {}
+    # Load defaults
+    default_path = os.path.join(BASE_DIR, "config.default.toml")
+    if os.path.exists(default_path):
         try:
-            with open(CONFIG_PATH, "r") as f:
-                return yaml.safe_load(f)
+            with open(default_path, "rb") as f:
+                config = tomllib.load(f)
         except Exception as e:
-            print(f"Error loading config: {e}")
-    return DEFAULT_CONFIG
+            logger.error(f"Error loading default config: {e}")
+
+    # Load user override
+    user_path = os.path.join(BASE_DIR, "config.toml")
+    if os.path.exists(user_path):
+        try:
+            with open(user_path, "rb") as f:
+                user_config = tomllib.load(f)
+                deep_merge(config, user_config)
+        except Exception as e:
+            logger.error(f"Error loading user config: {e}")
+
+    return config
 
 
 config = load_config()
-obs_cfg = config.get("observer", DEFAULT_CONFIG["observer"])
+obs_cfg = config.get("observer", {})
 drv_cfg = config.get("driver", {})
 
 
@@ -1635,7 +1639,7 @@ class CelestronAUXDriver(IPyDriver):
                     self.tle_line2.membervalue,
                 )
             except Exception as e:
-                print(f"Error reading TLE: {e}")
+                logger.error(f"Error reading TLE: {e}")
                 return float(self.ra.membervalue), float(self.dec.membervalue)
 
         if body:
@@ -1824,7 +1828,7 @@ class CelestronAUXDriver(IPyDriver):
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"Error in tracking loop: {e}")
+            logger.error(f"Error in tracking loop: {e}")
 
     async def hardware(self) -> None:
         """Periodically poll hardware status."""
@@ -1884,7 +1888,9 @@ def main() -> None:
 
     if args.server:
         if not HAS_SERVER or "IPyServer" not in globals():
-            print("Error: indipyserver not installed. Run: pip install indipyserver")
+            logger.error(
+                "Error: indipyserver not installed. Run: pip install indipyserver"
+            )
             return
         server = globals()["IPyServer"](driver, port=args.port)
         asyncio.run(server.asyncrun())
