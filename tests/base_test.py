@@ -83,6 +83,7 @@ class CelestronAUXBaseTest(unittest.IsolatedAsyncioTestCase):
         """
         Initializes the driver and connects to the simulator.
         """
+        print(f"\n[SETUP] Initializing {self.__class__.__name__}...")
         self.driver = CelestronAUXDriver()
         self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
 
@@ -92,12 +93,31 @@ class CelestronAUXBaseTest(unittest.IsolatedAsyncioTestCase):
 
         self.driver.send = mock_send
 
+        print(
+            f"[SETUP] Connecting to hardware at {self.driver.port_name.membervalue}..."
+        )
         self.driver.conn_connect.membervalue = "On"
         await self.driver.handle_connection(None)
+
+        if not self.driver.communicator or not self.driver.communicator.connected:
+            print("[SETUP] FAILED to connect to hardware!")
+            self.fail("Could not connect to telescope simulator/hardware")
+
+        # For hardware parity, ensure we are unparked
+        if hasattr(self.driver, "park_switch"):
+            if self.driver.park_switch.membervalue == "On":
+                print("[SETUP] Hardware is PARKED. Attempting to unpark for tests...")
+                self.driver.park_switch.membervalue = "Off"
+                self.driver.unpark_switch.membervalue = "On"
+                await self.driver.handle_unpark(None)
+
+        print("[SETUP] Hardware ready.")
 
     async def asyncTearDown(self):
         """
         Disconnects the driver.
         """
+        print(f"[TEARDOWN] Disconnecting driver from {self.__class__.__name__}...")
         if hasattr(self, "driver") and self.driver.communicator:
             await self.driver.communicator.disconnect()
+        print("[TEARDOWN] Complete.")
