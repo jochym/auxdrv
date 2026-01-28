@@ -1,6 +1,8 @@
 # Hardware Validation and Compatibility
 
-Before deploying changes to a physical mount, follow these validation protocols.
+**CAUTION: Experimental Status**
+
+As of version 1.7.6, this driver is primarily validated against the `caux-sim` simulator. Deployment on physical hardware should be approached with extreme caution. The following scripts are provided for testing purposes.
 
 ## Hardware Interaction Test (HIT)
 
