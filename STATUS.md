@@ -1,24 +1,25 @@
 # Project Status: INDI Celestron AUX Driver (Python)
 
-**Current Version:** v1.6.5  
-**Last Updated:** 2026-01-19  
-**Status:** Feature Complete (Virtual) / Transitioning to Hardware Validation
+**Current Version:** v1.7.5  
+**Last Updated:** 2026-01-27  
+**Status:** Feature Complete (Hardware Ready) / Validated against `caux-sim`
 
 ---
 
 ## 🎯 Current Session Focus
-Transition the project from **Virtual Validation** (Simulator-based) to **Physical Hardware Integration** and implement Phase 17 (Advanced Features).
+Transition the project from **Virtual Validation** (Internal Simulator) to **Hardware-Grade Simulation** and finalize Driver-Simulator parity.
+- [x] **Standalone Simulator Migration**: Fully integrated `caux-sim` into the CI/CD and local development workflow.
 - [ ] **Alignment Hibernation**: Implement persistent storage of sync points.
 - [ ] **Software PEC**: Implement tracking rate corrections based on measured PE.
 
 ---
 
 ## 🚀 Achievements & Milestones
-*   **Tracking Engine**: High-inertia dead reckoning ($dt=30s$) with sub-step floating-point precision. Achieved sub-arcsecond stability in simulation.
+*   **Async Core**: Driver refactored for non-blocking background tasking, enabling responsive Abort and parallel status polling.
+*   **Tracking Engine**: High-inertia dead reckoning ($dt=30s$) with sub-step floating-point precision. Achieved sub-arcsecond stability.
 *   **Alignment System**: Adaptive mathematical model scaling from SVD Rotation (1-2 pts) to Full 6-parameter geometric correction (6+ pts).
+*   **Standalone Validation**: Standard test pool (32 tests) verified passing against standalone `caux-sim`.
 *   **Digital Twin**: Integrated 3D Web Console (Three.js) for collision detection and visual motion verification.
-*   **Quality Assurance**: 41 automated tests passing. CI/CD pipeline active on GitHub.
-*   **Hardware Ready**: Dynamic mount detection (`MC_GET_MODEL`), RTC management, and battery telemetry implemented.
 
 ---
 

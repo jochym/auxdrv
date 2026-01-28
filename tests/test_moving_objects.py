@@ -34,18 +34,17 @@ class TestMovingObjects(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_moving_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
-                sys.executable,
-                "-u",
-                "src/celestron_aux/simulator/nse_simulator.py",
-                "-t",
+                "caux-sim",
+                "--text",
                 "--perfect",
-                "-p",
+                "--hc",
+                "--port",
                 str(cls.sim_port),
             ],
             stdout=cls.sim_log,
             stderr=cls.sim_log,
         )
-        time.sleep(2)
+        time.sleep(3)
 
     @classmethod
     def tearDownClass(cls):

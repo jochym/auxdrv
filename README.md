@@ -4,16 +4,16 @@
 ![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)
 ![INDI](https://img.shields.io/badge/INDI-compatible-orange)
-![Version](https://img.shields.io/badge/version-1.6.5-blue)
+![Version](https://img.shields.io/badge/version-1.7.5-blue)
 [![Documentation](https://img.shields.io/badge/docs-User%20Manual-brightgreen)](docs/USER_MANUAL.md)
 
-A modern INDI driver for Celestron mounts using the AUX protocol, with a built-in simulator for testing.
+A modern INDI driver for Celestron mounts using the AUX protocol, validated against the hardware-grade `caux-sim` simulator.
 
 ## Project Architecture
 
 *   `celestron_indi_driver.py`: Main INDI driver integrating with the `indipydriver` library.
 *   `celestron_aux_driver.py`: Library handling the Celestron AUX binary communication protocol.
-*   `simulator/`: Sophisticated NexStar telescope simulator, allowing driver testing without physical hardware.
+*   **Simulator**: The project utilizes the standalone `caux-sim` command for high-fidelity hardware emulation.
 
 ## Requirements
 
@@ -21,21 +21,16 @@ A modern INDI driver for Celestron mounts using the AUX protocol, with a built-i
 *   `indipydriver >= 3.0.4`
 *   `pyserial-asyncio`
 *   `ephem`
-*   `textual`
-*   `rich`
 *   `numpy`
 *   `scipy`
-
-Installation of dependencies:
-```bash
-pip install indipydriver pyserial-asyncio ephem textual rich numpy scipy
-```
+*   `caux-sim` (Standalone simulator package)
 
 ## Running
 
 1.  **Starting the simulator:**
-    *   Graphical mode (Textual TUI): `python src/celestron_aux/simulator/nse_simulator.py`
-    *   Headless mode (background): `python src/celestron_aux/simulator/nse_simulator.py -t`
+    ```bash
+    caux-sim --text --perfect
+    ```
 2.  **Starting the INDI driver:**
     ```bash
     python src/celestron_aux/celestron_indi_driver.py
@@ -43,30 +38,12 @@ pip install indipydriver pyserial-asyncio ephem textual rich numpy scipy
 
 To connect to the simulator, use the port: `socket://localhost:2000`.
 
-## Stellarium Integration
-
-The simulator provides a server compatible with the Stellarium protocol on port `10001`. To verify operation:
-
-1.  Start the simulator: `python simulator/nse_simulator.py`
-2.  In Stellarium, go to: **Configuration (F2) -> Plugins -> Telescope Control -> Configure**.
-3.  Add a new telescope:
-    *   Controlled by: **External software or another computer**.
-    *   Name: **NSE Simulator**.
-    *   Host: **localhost**, Port: **10001**.
-4.  Connect to the telescope. You will see the telescope reticle on the sky map.
-
-## Documentation
-
-- [User Manual](docs/USER_MANUAL.md) - Installation and basic operation.
-- [Alignment System](docs/ALIGNMENT_SYSTEM.md) - Technical guide to the multi-point SVD alignment.
-- [Simulator Guide](simulator/README.md) - How to use the built-in telescope simulator.
-
 ## Features
+- **Non-Blocking Execution**: Background tasking for slewing and tracking ensures the driver remains responsive.
 - **Singular Value Decomposition (SVD) Alignment**: Robust multi-point calibration with RMS error reporting.
 - **Predictive Tracking**: 2nd-order prediction for smooth tracking of stars, planets, and satellites.
 - **Full AUX Support**: Native binary protocol for high performance and compatibility.
 - **Safety**: Built-in slew limits and cord-wrap prevention.
-- **Interactive Simulator**: Modern TUI for offline development and testing.
 
 ## Configuration
 

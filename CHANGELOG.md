@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.5] - 2026-01-27
+
+### Added
+- **Standalone Simulator Integration**: Switched the standard validation and testing workflow to use the `caux-sim` standalone simulator. This provides higher protocol faithfulness and better parity with real hardware.
+- **Experimental Test Pool**: Created `tests/experimental/` to host tests requiring specialized synchronization with external simulators.
+
+### Changed
+- **Async Driver Architecture**: Refactored `GOTO` and `SYNC` operations into non-blocking background tasks. The driver now remains fully responsive to INDI commands (like `ABORT`) during movement.
+- **Improved Abort Logic**: The `TELESCOPE_ABORT_MOTION` command now immediately cancels any active background movement tasks for instant response.
+- **Test Robustness**: Updated integration tests with increased timeouts and better state transition awareness to accommodate standalone simulator latency.
+
+### Fixed
+- **Race Conditions**: Resolved a race condition where GoTo status could blink between `Busy` and `Idle` due to task completion timing.
+- **Sync Point Management**: Fixed a coordinate capturing bug in the `SYNC` command by ensuring RA/Dec are cached at the exact moment the command is received.
+
 ## [1.7.0] - 2026-01-20
 
 ### Changed

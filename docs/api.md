@@ -28,21 +28,3 @@ This section contains the automatically generated documentation for the project 
    :undoc-members:
    :show-inheritance:
 ```
-
-## Simulator Core
-
-```{eval-rst}
-.. automodule:: celestron_aux.simulator.nse_telescope
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```
-
-## Web Console
-
-```{eval-rst}
-.. automodule:: celestron_aux.simulator.web_console
-   :members:
-   :undoc-members:
-   :show-inheritance:
-```

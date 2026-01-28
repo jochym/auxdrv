@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "indi-celestron-aux"
-version = "1.6.5"
+version = "1.7.5"
 description = "INDI driver for Celestron AUX mounts"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,15 +22,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-simulator = [
-    "textual>=1.0.0",
-]
-web = [
-    "textual>=1.0.0",
-    "fastapi",
-    "uvicorn",
-    "websockets",
-]
 dev = [
     "pytest",
     "pytest-asyncio",
@@ -45,7 +36,7 @@ docs = [
 
 [project.scripts]
 indi-celestron-aux = "celestron_aux.celestron_indi_driver:main"
-celestron-aux-simulator = "celestron_aux.simulator.nse_simulator:main"
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/celestron_aux"]

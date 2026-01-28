@@ -6,7 +6,7 @@
 ![INDI Compatible](https://img.shields.io/badge/INDI-compatible-orange)
 
 A professional-grade Python INDI driver for Celestron mounts using the native binary AUX protocol. 
-It features a high-fidelity "Digital Twin" simulator with 3D visualization and advanced 6-parameter geometric alignment.
+It supports the high-fidelity `caux-sim` simulator and advanced 6-parameter geometric alignment.
 
 ```{toctree}
 ---

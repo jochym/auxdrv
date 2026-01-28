@@ -39,19 +39,18 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         cls.sim_log = open("test_safety_sim.log", "w")
         cls.sim_proc = subprocess.Popen(
             [
-                sys.executable,
-                "-u",
-                "src/celestron_aux/simulator/nse_simulator.py",
-                "-t",
+                "caux-sim",
+                "--text",
                 "--perfect",
-                "-p",
+                "--hc",
+                "--port",
                 str(cls.sim_port),
             ],
             stdout=cls.sim_log,
             stderr=cls.sim_log,
         )
 
-        time.sleep(2)
+        time.sleep(3)
 
     @classmethod
     def tearDownClass(cls):
@@ -139,6 +138,7 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
         success = await self.driver.goto_position(0, target_alt)
         self.assertTrue(success, "Driver blocked GoTo inside Alt limits")
 
+    @unittest.skip("caux-sim does not simulate Focuser (0x12) by default")
     async def test_focuser_control(self):
         """
         Description:

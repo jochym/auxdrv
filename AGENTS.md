@@ -10,7 +10,7 @@ The project uses `hatch` for building, but local development is typically done i
 # Setup environment
 python -m venv venv
 source venv/bin/activate
-pip install -e ".[dev,simulator,web,docs]"
+pip install -e ".[dev,docs]"
 ```
 
 ### Running Tests
@@ -18,18 +18,14 @@ All tests require `PYTHONPATH` to include the `src` directory.
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 
-# Run all tests
+# Run all standard tests (unit and integration)
 pytest
 
-# Run a specific test file
-pytest tests/test_functional.py
+# Run only integration tests (full stack: client <-> driver <-> caux-sim)
+pytest tests/integration/test_full_stack.py
 
-# Run a specific test case (useful for debugging specific features)
-pytest tests/test_functional.py::TestFunctional::test_1_connection
-
-# Run tests with simulator logging enabled
-export DEBUG_SIM=1
-pytest tests/test_functional.py
+# Run experimental tests (might require manual synchronization)
+pytest tests/experimental/test_experimental_mismatches.py
 ```
 
 ### Linting and Type Checking
@@ -102,20 +98,30 @@ The `AlignmentModel` automatically upgrades its complexity based on the number o
 ## 🖥 The Simulator & Digital Twin
 
 ### Running the Simulator
-The simulator provides a Textual TUI and a 3D Web Console (Three.js).
+The project uses the standalone `caux-sim` simulator (closer to real hardware).
 ```bash
-# Start simulator in TUI mode
-python src/celestron_aux/simulator/nse_simulator.py
+# Start simulator in headless mode
+caux-sim --text --perfect
 ```
 Options:
 - `--text`: Headless mode (no TUI).
 - `--debug`: Enable verbose packet logging to `stderr`.
+- `--perfect`: Disable mechanical imperfections for clean testing.
+- `--web`: Enable the 3D Web Console.
 
 ### Digital Twin
-The 3D view is served via FastAPI. Access it at `http://localhost:8000` when the simulator is running. It visualizes:
+The 3D view is served via FastAPI. Access it at `http://localhost:8000` when the simulator is running with `--web`. It visualizes:
 - Real-time mount position.
 - Horizon limits and safety "keep-out" zones.
 - Nearby bright stars (via `ephem`).
+
+---
+
+## 🏗 Integration Testing
+Integration tests use `caux-sim` automatically via the `simulator_process` fixture in `tests/integration/conftest.py`.
+```bash
+pytest tests/integration/test_full_stack.py
+```
 
 ---
 
@@ -143,8 +149,10 @@ These belong in `src/celestron_aux/config.yaml`.
 - **Coordinates**: The mount uses Alt/Az internally. The driver converts these to 24-bit AUX step counts using `equatorial_to_steps`.
 - **INDI Library**: We use `indipydriver`. When adding properties, ensure you update both the initialization in `CelestronAUXDriver.__init__` and the `on_xxx` handlers.
 - **Git Policy**: Never commit `*.log` files or the `venv/` directory.
+- **Documentation Language**: All files on disk (code, comments, documentation, logs) MUST be in English, regardless of the conversation language.
+- **Task Management**: Use the `todowrite` tool to document and track the progress of complex tasks. Mark steps as completed immediately after finishing.
 
 ---
-*Last Updated: 2026-01-19*
-*Version: 1.6.5*
+*Last Updated: 2026-01-27*
+*Version: 1.7.5*
 *Contact: jochym@gmail.com*

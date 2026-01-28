@@ -11,6 +11,7 @@ Configuration is loaded from config.default.toml and config.toml.
 from __future__ import annotations
 import asyncio
 from typing import Optional, List, Tuple, Dict, Any, Union, TYPE_CHECKING
+from decimal import Decimal
 import indipydriver
 from indipydriver import (
     IPyDriver,
@@ -218,6 +219,7 @@ class CelestronAUXDriver(IPyDriver):
         self.current_azm_steps = 0
         self.current_alt_steps = 0
         self._tracking_task: Optional[asyncio.Task] = None
+        self._movement_task: Optional[asyncio.Task] = None
         self._align_model = AlignmentModel()
         self.current_target_ra = 0.0
         self.current_target_dec = 0.0
@@ -944,6 +946,11 @@ class CelestronAUXDriver(IPyDriver):
         if event is not None:
             self.abort_motion_vector.update(event)
         if self.abort_motion.membervalue == "On":
+            # Cancel background movement tasks
+            if self._movement_task:
+                self._movement_task.cancel()
+                self._movement_task = None
+
             if self.communicator and self.communicator.connected:
                 # Send Rate 0 to both axes
                 await self.slew_by_rate(AUXTargets.AZM, 0, 1)
@@ -1005,15 +1012,28 @@ class CelestronAUXDriver(IPyDriver):
 
         pos = int(self.focus_pos.membervalue)
         # Celestron Focuser uses MC_GOTO_FAST (0x02) to FOC target (0x12).
-        resp = await self.communicator.send_command(
-            AUXCommand(
-                AUXCommands.MC_GOTO_FAST,
-                AUXTargets.APP,
-                AUXTargets.FOCUS,
-                pack_int3_steps(pos),
-            )
+        cmd = AUXCommand(
+            AUXCommands.MC_GOTO_FAST,
+            AUXTargets.APP,
+            AUXTargets.FOCUS,
+            pack_int3_steps(pos),
         )
-        await self.focuser_vector.send_setVector(state="Ok" if resp else "Alert")
+        await self.focuser_vector.send_setVector(state="Busy")
+        resp = await self.communicator.send_command(cmd)
+        if resp:
+            # Wait for slew
+            for _ in range(60):
+                await asyncio.sleep(1)
+                st = await self.communicator.send_command(
+                    AUXCommand(
+                        AUXCommands.MC_SLEW_DONE, AUXTargets.APP, AUXTargets.FOCUS
+                    )
+                )
+                if st and len(st.data) > 0 and st.data[0] == 0xFF:
+                    break
+            await self.focuser_vector.send_setVector(state="Ok")
+        else:
+            await self.focuser_vector.send_setVector(state="Alert")
 
     async def handle_gps_refresh(self, event: Any) -> None:
         """Manually refreshes location and time from the GPS module."""
@@ -1383,21 +1403,39 @@ class CelestronAUXDriver(IPyDriver):
         """Handles GoTo command using raw encoder steps."""
         if event is not None:
             self.absolute_coord_vector.update(event)
-        await self.absolute_coord_vector.send_setVector(state="Busy")
 
-        target_azm = int(self.target_azm.membervalue)
-        target_alt = int(self.target_alt.membervalue)
+        if self._movement_task:
+            self._movement_task.cancel()
 
-        # For raw steps GoTo, we just do it once with full approach settings
-        success = await self.goto_position(target_azm, target_alt)
+        self._movement_task = asyncio.create_task(self._run_raw_goto(event))
 
-        if success:
-            await asyncio.gather(
-                self._wait_for_slew(AUXTargets.AZM), self._wait_for_slew(AUXTargets.ALT)
-            )
-            await self.absolute_coord_vector.send_setVector(state="Ok")
-        else:
+    async def _run_raw_goto(self, event: Any) -> None:
+        """Background task for raw step GoTo."""
+        try:
+            await self.absolute_coord_vector.send_setVector(state="Busy")
+
+            target_azm = int(self.target_azm.membervalue)
+            target_alt = int(self.target_alt.membervalue)
+
+            # For raw steps GoTo, we just do it once with full approach settings
+            success = await self.goto_position(target_azm, target_alt)
+
+            if success:
+                await asyncio.gather(
+                    self._wait_for_slew(AUXTargets.AZM),
+                    self._wait_for_slew(AUXTargets.ALT),
+                )
+                await self.absolute_coord_vector.send_setVector(state="Ok")
+            else:
+                await self.absolute_coord_vector.send_setVector(state="Alert")
+        except asyncio.CancelledError:
+            await self.absolute_coord_vector.send_setVector(state="Idle")
+        except Exception as e:
+            logger.error(f"Error in raw GoTo: {e}")
             await self.absolute_coord_vector.send_setVector(state="Alert")
+        finally:
+            if self._movement_task and not self._movement_task.cancelled():
+                self._movement_task = None
 
     async def slew_to(self, axis: AUXTargets, steps: int, fast: bool = True) -> bool:
         """Sends a position-based GoTo command to a motor axis."""
@@ -1503,72 +1541,89 @@ class CelestronAUXDriver(IPyDriver):
         if event is not None:
             self.equatorial_vector.update(event)
 
-        # 1. Capture target coordinates from the vector to avoid races with polling
+        # Capture target coordinates IMMEDIATELY to avoid race with polling
         target_ra = float(self.ra.membervalue)
         target_dec = float(self.dec.membervalue)
 
-        if self.target_sidereal.membervalue == "On":
-            self.current_target_ra = target_ra
-            self.current_target_dec = target_dec
-
         if self.set_sync.membervalue == "On":
-            # Perform SYNC
-            await self.equatorial_vector.send_setVector(state="Busy")
-            # We don't force ephem.now() here, let update_observer handle it
-            await self.read_mount_position()
+            # Sync is fast, we can run it inline
+            await self._run_sync(target_ra, target_dec)
+            return
 
-            # 1. Convert Target RA/Dec to ideal Alt/Az at the same time
-            self.update_observer()
-            sync_time = self.observer.date
-            body = ephem.FixedBody()
-            body._ra = math.radians(target_ra * 15.0)
-            body._dec = math.radians(target_dec)
-            body._epoch = sync_time
-            body.compute(self.observer)
+        if self._movement_task:
+            self._movement_task.cancel()
 
-            ideal_az_deg = math.degrees(float(body.az))
-            ideal_alt_deg = math.degrees(float(body.alt))
+        self._movement_task = asyncio.create_task(
+            self._run_equatorial_goto(target_ra, target_dec)
+        )
 
-            # 2. Get current raw Alt/Az from encoders
-            raw_az_deg = (self.current_azm_steps / STEPS_PER_REVOLUTION) * 360.0
-            raw_alt_deg = (self.current_alt_steps / STEPS_PER_REVOLUTION) * 360.0
+    async def _run_sync(self, target_ra: float, target_dec: float) -> None:
+        """Logic for performing a Sync operation."""
+        # Perform SYNC
+        await self.equatorial_vector.send_setVector(state="Busy")
+        await self.read_mount_position()
 
-            # 3. Add point to alignment model
-            sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
-            mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
-            self._align_model.add_point(sky_vec, mount_vec, weight=1.0)
+        # 1. Convert Target RA/Dec to ideal Alt/Az
+        self.update_observer()
+        sync_time = self.observer.date
+        body = ephem.FixedBody()
+        body._ra = math.radians(target_ra * 15.0)
+        body._dec = math.radians(target_dec)
+        body._epoch = sync_time
+        body.compute(self.observer)
 
-            await self.update_alignment_status()
+        ideal_az_deg = math.degrees(float(body.az))
+        ideal_alt_deg = math.degrees(float(body.alt))
 
-            # Physical Sync (sets MC position to current state)
-            if self.communicator:
-                cmd_azm = AUXCommand(
-                    AUXCommands.MC_SET_POSITION,
-                    AUXTargets.APP,
-                    AUXTargets.AZM,
-                    pack_int3_steps(self.current_azm_steps),
-                )
-                cmd_alt = AUXCommand(
-                    AUXCommands.MC_SET_POSITION,
-                    AUXTargets.APP,
-                    AUXTargets.ALT,
-                    pack_int3_steps(self.current_alt_steps),
-                )
-                s1 = await self.communicator.send_command(cmd_azm)
-                s2 = await self.communicator.send_command(cmd_alt)
+        # 2. Get current raw Alt/Az from encoders
+        raw_az_deg = (self.current_azm_steps / STEPS_PER_REVOLUTION) * 360.0
+        raw_alt_deg = (self.current_alt_steps / STEPS_PER_REVOLUTION) * 360.0
 
-                await self.equatorial_vector.send_setVector(
-                    state="Ok" if s1 and s2 else "Alert"
-                )
-            else:
-                await self.equatorial_vector.send_setVector(state="Alert")
+        # 3. Add point to alignment model
+        sky_vec = vector_from_altaz(ideal_az_deg, ideal_alt_deg)
+        mount_vec = vector_from_altaz(raw_az_deg, raw_alt_deg)
+        self._align_model.add_point(sky_vec, mount_vec, weight=1.0)
+
+        # Update point count property before sending vectors
+        self.align_point_count.membervalue = len(self._align_model.points)
+        await self.update_alignment_status()
+
+        # Physical Sync
+        if self.communicator:
+            cmd_azm = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.AZM,
+                pack_int3_steps(self.current_azm_steps),
+            )
+            cmd_alt = AUXCommand(
+                AUXCommands.MC_SET_POSITION,
+                AUXTargets.APP,
+                AUXTargets.ALT,
+                pack_int3_steps(self.current_alt_steps),
+            )
+            s1 = await self.communicator.send_command(cmd_azm)
+            s2 = await self.communicator.send_command(cmd_alt)
+
+            await self.equatorial_vector.send_setVector(
+                state="Ok" if s1 and s2 else "Alert"
+            )
         else:
+            await self.equatorial_vector.send_setVector(state="Alert")
+
+    async def _run_equatorial_goto(self, target_ra: float, target_dec: float) -> None:
+        """Background task for equatorial GoTo."""
+        try:
             # Perform GOTO
             await self.equatorial_vector.send_setVector(state="Busy")
 
             # Iterative GoTo for high precision
             for attempt in range(2):
-                t_ra, t_dec = await self._get_target_equatorial()
+                # Use passed RA/Dec for first attempt
+                t_ra, t_dec = target_ra, target_dec
+                if attempt > 0:
+                    t_ra, t_dec = await self._get_target_equatorial()
+
                 azm_steps, alt_steps = await self.equatorial_to_steps(t_ra, t_dec)
 
                 # First attempt: Fast, no anti-backlash. Second: Precision.
@@ -1599,6 +1654,14 @@ class CelestronAUXDriver(IPyDriver):
                 await self.mount_status_vector.send_setVector()
 
             await self.equatorial_vector.send_setVector(state="Ok")
+        except asyncio.CancelledError:
+            await self.equatorial_vector.send_setVector(state="Idle")
+        except Exception as e:
+            logger.error(f"Error in equatorial GoTo: {e}")
+            await self.equatorial_vector.send_setVector(state="Alert")
+        finally:
+            if self._movement_task and not self._movement_task.cancelled():
+                self._movement_task = None
 
     async def _get_target_equatorial(
         self, time_offset: float = 0, base_date: Optional[Any] = None
@@ -1800,9 +1863,11 @@ class CelestronAUXDriver(IPyDriver):
                 rate_alt = diff_steps(s_plus_alt, s_minus_alt) / (2.0 * dt)
 
                 # 3. Apply rates
-                factor = (360.0 * 3600.0 * 1024.0) / STEPS_PER_REVOLUTION
-                val_azm = int(round(abs(rate_azm) * factor))
-                val_alt = int(round(abs(rate_alt) * factor))
+                # Guide rate conversion factor:
+                # From Celestron's documentation: 1/1024 arcsec/sec = 128/10125 steps/sec
+                factor = Decimal(10125) / Decimal(128)
+                val_azm = int(round(abs(rate_azm) * float(factor)))
+                val_alt = int(round(abs(rate_alt) * float(factor)))
 
                 cmd_azm = AUXCommand(
                     AUXCommands.MC_SET_POS_GUIDERATE
