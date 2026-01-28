@@ -4,46 +4,34 @@
 ![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-green)](https://www.gnu.org/licenses/gpl-3.0.txt)
 ![INDI Compatible](https://img.shields.io/badge/INDI-compatible-orange)
+![Version](https://img.shields.io/badge/version-1.7.6-blue)
 
 A professional-grade Python INDI driver for Celestron mounts using the native binary AUX protocol. 
 It supports the high-fidelity `caux-sim` simulator and advanced 6-parameter geometric alignment.
 
 ```{toctree}
----
-maxdepth: 2
-caption: User Guide
----
-USER_MANUAL
-VALIDATION
-HARDWARE_TESTING
+:maxdepth: 2
+:caption: User Guide
+
+getting_started
+user_guide
+alignment
+hardware_validation
 ```
 
 ```{toctree}
----
-maxdepth: 2
-caption: Technical Architecture
----
-ALIGNMENT_SYSTEM
-TRACKING_SYSTEM
-ANALYSIS_DEAD_RECKONING
-READINESS
-COMPLETENESS
-```
+:maxdepth: 2
+:caption: Technical Reference
 
-```{toctree}
----
-maxdepth: 2
-caption: API Reference
----
+technical_reference
+testing
 api
 ```
 
 ```{toctree}
----
-maxdepth: 1
-caption: Project Info
----
-INDI_SERVER_NOTES
+:maxdepth: 1
+:caption: Project Info
+
 CHANGELOG
 ```
 

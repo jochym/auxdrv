@@ -6,10 +6,10 @@ from datetime import datetime
 sys.path.insert(0, os.path.abspath("../src"))
 
 # -- Project information -----------------------------------------------------
-project = "indi-celestron-aux"
+project = "INDI Celestron AUX Driver"
 copyright = f"{datetime.now().year}, Paweł T. Jochym"
 author = "Paweł T. Jochym"
-release = "1.6.5"
+release = "1.7.6"
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -20,6 +20,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "myst_parser",
     "sphinx_copybutton",
+    "sphinx_simplepdf",
 ]
 
 templates_path = ["_templates"]

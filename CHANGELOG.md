@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.6] - 2026-01-28
+
+### Changed
+- **Documentation Overhaul**: Consolidated and reorganized the entire documentation suite. Migrated to Sphinx with the Furo theme and added support for PDF generation.
+- **Language Standardization**: All documentation and comments have been reviewed and standardized to English.
+- **Project Structure**: Cleaned up the `docs/` directory, removing redundant and overlapping files in favor of a structured Sphinx hierarchy.
+
 ## [1.7.5] - 2026-01-27
 
 ### Added
