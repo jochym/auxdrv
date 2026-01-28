@@ -1,125 +1,20 @@
 import asyncio
-import unittest
 import os
 import sys
-import signal
-import subprocess
-import time
 import math
 import ephem
-from celestron_aux.alignment import AlignmentModel
+from base_test import CelestronAUXBaseTest
 from celestron_aux.celestron_indi_driver import (
-    CelestronAUXDriver,
     AUXTargets,
     AUXCommand,
     AUXCommands,
 )
 
 
-class TestCelestronAUXFunctional(unittest.IsolatedAsyncioTestCase):
+class TestCelestronAUXFunctional(CelestronAUXBaseTest):
     """
     Functional test suite for the Celestron AUX INDI Driver.
-
-    This suite verifies the core functionality of the driver by interacting with
-    a simulated telescope mount. It covers connection management, basic GoTo
-    operations, tracking, parking, and multi-star alignment.
     """
-
-    sim_proc = None
-    sim_port = 2001
-    external_sim = False  # Set to True to use an already running simulator
-
-    @classmethod
-    def setUpClass(cls):
-        """
-        Sets up the test environment by launching the NSE Simulator.
-
-        Methodology:
-            Launches the simulator in headless mode (-t) on port 2001.
-            Captures output to 'test_sim.log'.
-        """
-        # Allow override via environment variable
-        if os.environ.get("EXTERNAL_SIM"):
-            cls.external_sim = True
-            cls.sim_port = int(os.environ.get("SIM_PORT", 2000))
-            return
-
-        # Start simulator and capture output (unbuffered)
-        cls.sim_log = open("test_sim.log", "w")
-        cls.sim_proc = subprocess.Popen(
-            [
-                "caux-sim",
-                "--text",
-                "--debug",
-                "--perfect",
-                "--hc",
-                "--port",
-                str(cls.sim_port),
-            ],
-            stdout=cls.sim_log,
-            stderr=cls.sim_log,
-        )
-        time.sleep(3)
-
-    @classmethod
-    def tearDownClass(cls):
-        """
-        Cleans up the test environment by terminating the simulator.
-        """
-        if cls.external_sim:
-            return
-        if cls.sim_proc:
-            cls.sim_proc.terminate()
-            cls.sim_proc.wait()
-        if hasattr(cls, "sim_log"):
-            cls.sim_log.close()
-
-    async def asyncSetUp(self):
-        """
-        Initializes the driver and connects to the simulator.
-        Resets mount position to (0,0) for each test.
-        """
-        self.driver = CelestronAUXDriver()
-        self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
-        self.driver.baud_rate.membervalue = 19200
-
-        # Mock INDI send to prevent actual network traffic during tests
-        async def mock_send(xmldata):
-            pass
-
-        self.driver.send = mock_send
-        # Connect
-        self.driver.conn_connect.membervalue = "On"
-        await self.driver.handle_connection(None)
-        self.assertTrue(self.driver.communicator and self.driver.communicator.connected)
-
-        # Reset position to 0,0
-        if self.driver.communicator:
-            from celestron_aux.celestron_aux_driver import pack_int3_steps
-
-            cmd_azm = AUXCommand(
-                AUXCommands.MC_SET_POSITION,
-                AUXTargets.APP,
-                AUXTargets.AZM,
-                pack_int3_steps(0),
-            )
-            cmd_alt = AUXCommand(
-                AUXCommands.MC_SET_POSITION,
-                AUXTargets.APP,
-                AUXTargets.ALT,
-                pack_int3_steps(0),
-            )
-            await self.driver.communicator.send_command(cmd_azm)
-            await self.driver.communicator.send_command(cmd_alt)
-            await self.driver.slew_by_rate(AUXTargets.AZM, 0, 1)
-            await self.driver.slew_by_rate(AUXTargets.ALT, 0, 1)
-
-    async def asyncTearDown(self):
-        """
-        Disconnects the driver.
-        """
-        if self.driver.communicator:
-            await self.driver.communicator.disconnect()
 
     async def wait_for_idle(self, timeout=120):
         """

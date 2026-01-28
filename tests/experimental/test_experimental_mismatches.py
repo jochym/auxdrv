@@ -1,65 +1,15 @@
 import asyncio
-import unittest
-import os
-import sys
-import subprocess
-import time
 import math
 import ephem
-from celestron_aux.alignment import AlignmentModel
+from tests.base_test import CelestronAUXBaseTest
 from celestron_aux.celestron_indi_driver import (
-    CelestronAUXDriver,
     AUXTargets,
     AUXCommand,
     AUXCommands,
-    STEPS_PER_REVOLUTION,
 )
 
 
-class TestExperimentalMismatches(unittest.IsolatedAsyncioTestCase):
-    sim_proc = None
-    sim_port = 2005
-
-    @classmethod
-    def setUpClass(cls):
-        cls.sim_log = open("test_exp_sim.log", "w")
-        cls.sim_proc = subprocess.Popen(
-            [
-                "caux-sim",
-                "--text",
-                "--perfect",
-                "--hc",
-                "--port",
-                str(cls.sim_port),
-            ],
-            stdout=cls.sim_log,
-            stderr=cls.sim_log,
-        )
-        time.sleep(3)
-
-    @classmethod
-    def tearDownClass(cls):
-        if cls.sim_proc:
-            cls.sim_proc.terminate()
-            cls.sim_proc.wait()
-        cls.sim_log.close()
-
-    async def asyncSetUp(self):
-        self.driver = CelestronAUXDriver()
-        self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
-
-        async def mock_send(xmldata):
-            pass
-
-        self.driver.send = mock_send
-
-        self.driver.conn_connect.membervalue = "On"
-        await self.driver.handle_connection(None)
-
-    async def asyncTearDown(self):
-        if self.driver.communicator:
-            await self.driver.communicator.disconnect()
-
+class TestExperimentalMismatches(CelestronAUXBaseTest):
     async def wait_for_idle(self, timeout=120):
         if not self.driver.communicator:
             return False

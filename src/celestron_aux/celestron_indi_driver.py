@@ -1545,6 +1545,12 @@ class CelestronAUXDriver(IPyDriver):
         target_ra = float(self.ra.membervalue)
         target_dec = float(self.dec.membervalue)
 
+        # Always update tracking targets when a new GoTo is issued
+        # This prevents the tracking loop from jumping to 0,0 if the driver
+        # is in sidereal mode but internal target variables weren't updated.
+        self.current_target_ra = target_ra
+        self.current_target_dec = target_dec
+
         if self.set_sync.membervalue == "On":
             # Sync is fast, we can run it inline
             await self._run_sync(target_ra, target_dec)

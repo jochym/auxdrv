@@ -15,10 +15,29 @@ INDI_SERVER_PORT = 7624
 @pytest.fixture(scope="session")
 def simulator_process():
     """Starts the mount simulator using the standalone caux-sim command."""
+    sim_port = int(os.environ.get("SIM_PORT", 2000))
+    if os.environ.get("EXTERNAL_SIM"):
+        # Dummy process-like object
+        class DummyProc:
+            pid = 0
+
+            def wait(self):
+                pass
+
+        return DummyProc()
+
     cmd = [
         "caux-sim",
         "--text",
         "--perfect",
+        "--hc",
+        "--web",
+        "--web-host",
+        "0.0.0.0",
+        "--web-port",
+        "8080",
+        "--port",
+        str(sim_port),
     ]
     env = os.environ.copy()
     # caux-sim is assumed to be in the PATH as per user instructions
@@ -28,13 +47,19 @@ def simulator_process():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
-        preexec_fn=os.setsid,
+        preexec_fn=os.setsid if hasattr(os, "setsid") else None,
     )
 
-    time.sleep(2)
+    time.sleep(3)
     yield proc
-    os.killpg(os.getpgid(proc.pid), 15)
-    proc.wait()
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(os.getpgid(proc.pid), 15)
+        else:
+            proc.terminate()
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
 
 
 @pytest.fixture(scope="session")

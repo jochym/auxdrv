@@ -1,11 +1,8 @@
 import asyncio
-import unittest
 import os
-import sys
-import subprocess
-import time
+import unittest
+from base_test import CelestronAUXBaseTest
 from celestron_aux.celestron_indi_driver import (
-    CelestronAUXDriver,
     AUXTargets,
     AUXCommand,
     AUXCommands,
@@ -13,77 +10,15 @@ from celestron_aux.celestron_indi_driver import (
 )
 
 
-class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
+class TestSafetyAndAccessories(CelestronAUXBaseTest):
     """
     Test suite for safety features and accessory control.
-
-    Verifies that the driver correctly enforces movement limits, handles
-    cord-wrap prevention, and communicates with auxiliary components like
-    Focuser and GPS modules.
     """
 
-    sim_proc = None
-    sim_port = 2002
-    external_sim = False
-
-    @classmethod
-    def setUpClass(cls):
-        """
-        Launches a dedicated simulator instance for safety tests.
-        """
-        if os.environ.get("EXTERNAL_SIM"):
-            cls.external_sim = True
-            cls.sim_port = int(os.environ.get("SIM_PORT", 2000))
-            return
-
-        cls.sim_log = open("test_safety_sim.log", "w")
-        cls.sim_proc = subprocess.Popen(
-            [
-                "caux-sim",
-                "--text",
-                "--perfect",
-                "--hc",
-                "--port",
-                str(cls.sim_port),
-            ],
-            stdout=cls.sim_log,
-            stderr=cls.sim_log,
-        )
-
-        time.sleep(3)
-
-    @classmethod
-    def tearDownClass(cls):
-        """
-        Terminates the simulator instance.
-        """
-        if cls.external_sim:
-            return
-        if cls.sim_proc:
-            cls.sim_proc.terminate()
-            cls.sim_proc.wait()
-        if hasattr(cls, "sim_log"):
-            cls.sim_log.close()
-
     async def asyncSetUp(self):
-        """
-        Connects the driver to the simulator.
-        """
-        self.driver = CelestronAUXDriver()
-        self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
-
-        async def mock_send(xmldata):
-            pass
-
-        self.driver.send = mock_send
-        self.driver.conn_connect.membervalue = "On"
-        await self.driver.handle_connection(None)
-
+        await super().asyncSetUp()
         # Reset position to 0,0
         if self.driver.communicator and self.driver.communicator.connected:
-            from celestron_aux.celestron_aux_driver import pack_int3_steps
-            from celestron_aux.celestron_indi_driver import AUXCommand, AUXCommands
-
             cmd_azm = AUXCommand(
                 AUXCommands.MC_SET_POSITION,
                 AUXTargets.APP,
@@ -100,13 +35,6 @@ class TestSafetyAndAccessories(unittest.IsolatedAsyncioTestCase):
             await self.driver.communicator.send_command(cmd_alt)
             await self.driver.slew_by_rate(AUXTargets.AZM, 0, 1)
             await self.driver.slew_by_rate(AUXTargets.ALT, 0, 1)
-
-    async def asyncTearDown(self):
-        """
-        Disconnects the driver.
-        """
-        if self.driver.communicator:
-            await self.driver.communicator.disconnect()
 
     async def test_slew_limits(self):
         """

@@ -1,68 +1,18 @@
 import asyncio
-import unittest
 import math
 import ephem
 import numpy as np
-import time
-import subprocess
 import os
-import sys
-from celestron_aux.celestron_indi_driver import CelestronAUXDriver, STEPS_PER_REVOLUTION
+from base_test import CelestronAUXBaseTest
 
 
-class TestTrackingAccuracy(unittest.IsolatedAsyncioTestCase):
+class TestTrackingAccuracy(CelestronAUXBaseTest):
     """
     Automated verification of tracking accuracy, drift, and slew stability.
-    This replaces the 'visual check' with programmatic telemetry analysis.
     """
 
-    sim_port = 2000
-    sim_process = None
-
-    @classmethod
-    def setUpClass(cls):
-        """Starts the simulator once for the whole test suite."""
-        if os.environ.get("EXTERNAL_SIM"):
-            cls.sim_port = int(os.environ.get("SIM_PORT", 2000))
-            return
-
-        cls.sim_port = 2002  # Use a different port than functional tests
-        cls.sim_log = open("test_accuracy_sim.log", "w")
-        cls.sim_process = subprocess.Popen(
-            [
-                "caux-sim",
-                "--text",
-                "--debug",
-                "--perfect",
-                "--hc",
-                "--port",
-                str(cls.sim_port),
-            ],
-            stdout=cls.sim_log,
-            stderr=cls.sim_log,
-        )
-        time.sleep(3)
-
-    @classmethod
-    def tearDownClass(cls):
-        """Stops the simulator."""
-        if cls.sim_process:
-            cls.sim_process.terminate()
-            cls.sim_process.wait()
-            cls.sim_log.close()
-
     async def asyncSetUp(self):
-        self.driver = CelestronAUXDriver()
-        self.driver.port_name.membervalue = f"socket://localhost:{self.sim_port}"
-
-        async def mock_send(xmldata):
-            pass
-
-        self.driver.send = mock_send
-
-        self.driver.conn_connect.membervalue = "On"
-        await self.driver.handle_connection(None)
-
+        await super().asyncSetUp()
         # Reset position to 0,0
         if self.driver.communicator and self.driver.communicator.connected:
             from celestron_aux.celestron_indi_driver import (
@@ -88,10 +38,6 @@ class TestTrackingAccuracy(unittest.IsolatedAsyncioTestCase):
                     pack_int3_steps(0),
                 )
             )
-
-    async def asyncTearDown(self):
-        if self.driver.communicator:
-            await self.driver.communicator.disconnect()
 
     async def test_tracking_stability(self):
         """
