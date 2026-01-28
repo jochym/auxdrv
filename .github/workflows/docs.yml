@@ -37,6 +37,8 @@ jobs:
           cd docs
           # Build HTML using python -m sphinx to avoid path issues
           python -m sphinx.cmd.build -b html . _build/html
+          # Disable Jekyll processing so folders like _static are reachable
+          touch _build/html/.nojekyll
 
       - name: Build PDF
         run: |
